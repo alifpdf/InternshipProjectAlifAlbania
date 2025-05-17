@@ -22,10 +22,10 @@ public class AddDB {
                         insert.setDouble(1, latitude);
                         insert.setDouble(2, longitude);
                         insert.executeUpdate();
-                        System.out.println("✅ Kit ajouté.");
+                        System.out.println("Kit added.");
                     }
                 } else {
-                    System.out.println("🔁 Kit déjà existant.");
+                    System.out.println("Kit already exists.");
                 }
             }
         } catch (SQLException e) {
@@ -69,10 +69,10 @@ public class AddDB {
                         insert.setDate(5, date);
                         insert.setString(6, manufacturer);
                         insert.executeUpdate();
-                        System.out.println("✅ Capteur ajouté.");
+                        System.out.println("Sensor added.");
                     }
                 } else {
-                    System.out.println("🔁 Capteur déjà existant.");
+                    System.out.println("Sensor already exists.");
                 }
             }
 
@@ -89,7 +89,7 @@ public class AddDB {
             boolean locationExists = exists(conn, "SELECT 1 FROM location WHERE id = ?", idLocation);
 
             if (!kitExists || !deviceExists || !locationExists) {
-                System.out.println("❌ Une des entités (kit, device, location) n'existe pas.");
+                System.out.println(" One of kit or device or location does not exist.");
                 return;
             }
 
@@ -105,10 +105,10 @@ public class AddDB {
                     insert.setInt(2, idLocation);
                     insert.setInt(3, idKit);
                     insert.executeUpdate();
-                    System.out.println("Lien capteur/kit/lieu ajouté.");
+                    System.out.println("Sensor added on kit.");
                 }
             } else {
-                System.out.println("🔁 Lien déjà existant.");
+                System.out.println("Sensor already exists on kit");
             }
 
         } catch (SQLException e) {
@@ -159,7 +159,7 @@ public class AddDB {
 
         // 2. Ajouter un capteur (sensor)
         AddDB.addSensor(
-                "Capteur température",
+                "Temperature Sensor",
                 "TS-200",
                 Date.valueOf(LocalDate.of(2024, 5, 10)),
                 "ThermoCorp",
@@ -168,10 +168,10 @@ public class AddDB {
                 "°C"
         );
 
-        // 3. Lier capteur et kit à une localisation (assure-toi que l'ID 1 et 1 existent)
+
         AddDB.addSensorOnKit(4, 1, 1);
 
-        System.out.println("✅ Fin du test");
+        System.out.println("End");
     }
 
 
