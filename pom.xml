@@ -39,6 +39,13 @@
             <systemPath>${project.basedir}/lib/jade.jar</systemPath>
         </dependency>
 
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>42.7.2</version>
+        </dependency>
+
+
 
 
 
