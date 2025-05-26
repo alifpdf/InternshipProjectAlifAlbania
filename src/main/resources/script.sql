@@ -1,33 +1,49 @@
 -- ========================================
--- 🚫 Nettoyage
+-- 🧹 Cleanup
 -- ========================================
 DROP VIEW IF EXISTS MeasurementView;
 DROP TABLE IF EXISTS Measurement;
-DROP TABLE IF EXISTS DeviceLocation;
 DROP TABLE IF EXISTS Device;
 DROP TABLE IF EXISTS DeviceCategory;
 DROP TABLE IF EXISTS Parameter;
-DROP TABLE IF EXISTS Location;
+DROP TABLE IF EXISTS Kit;
+DROP TABLE IF EXISTS Area;
 DROP TABLE IF EXISTS LocationDataReport;
 
 -- ========================================
--- 🚀 Création des tables
+--  Table creation
 -- ========================================
 
--- Catégories de capteurs
+-- Device categories
 CREATE TABLE DeviceCategory (
                                 id SERIAL PRIMARY KEY,
                                 name TEXT NOT NULL UNIQUE
 );
 
--- Paramètres mesurés
+-- Measured parameters
 CREATE TABLE Parameter (
                            id SERIAL PRIMARY KEY,
-                           name TEXT NOT NULL UNIQUE,       -- ex : "température", "pH"
-                           unit TEXT                        -- ex : "°C", "mg/L", "NTU"
+                           name TEXT NOT NULL UNIQUE,
+                           unit TEXT
 );
 
--- Capteurs
+-- Monitoring areas
+CREATE TABLE Area (
+                      id SERIAL PRIMARY KEY,
+                      name TEXT NOT NULL UNIQUE,
+                      latitude DOUBLE PRECISION,
+                      longitude DOUBLE PRECISION,
+                      region TEXT
+);
+
+-- Sensor kits
+CREATE TABLE Kit (
+                     id SERIAL PRIMARY KEY,
+                     currentLatitude NUMERIC(18, 15),
+                     currentLongitude NUMERIC(18, 15)
+);
+
+-- Devices
 CREATE TABLE Device (
                         id SERIAL PRIMARY KEY,
                         category_id INTEGER REFERENCES DeviceCategory(id),
@@ -35,81 +51,22 @@ CREATE TABLE Device (
                         model TEXT NOT NULL,
                         serial_number TEXT UNIQUE NOT NULL,
                         install_date DATE,
-                        manufacturer TEXT
+                        manufacturer TEXT,
+                        kit_id INTEGER REFERENCES Kit(id) ON DELETE CASCADE
 );
 
--- Lieux
-CREATE TABLE Location (
-                          id SERIAL PRIMARY KEY,
-                          name TEXT NOT NULL UNIQUE,
-                          latitude DOUBLE PRECISION,
-                          longitude DOUBLE PRECISION,
-                          region TEXT
-);
-CREATE TABLE Kit (
-                     id SERIAL PRIMARY KEY,
-                     latitude DOUBLE PRECISION,
-                     longitude DOUBLE PRECISION
-);
-
--- Déploiement capteurs
-CREATE TABLE DeviceLocation (
-                                id SERIAL PRIMARY KEY,
-                                device_id INTEGER REFERENCES Device(id) ON DELETE CASCADE,
-                                location_id INTEGER REFERENCES Location(id) ON DELETE CASCADE,
-                                deployment_date DATE,
-                                kit_id INTEGER REFERENCES Kit(id) ON DELETE CASCADE ,
-                                CONSTRAINT unique_device_location UNIQUE (device_id, location_id, kit_id)
-);
-
--- Mesures
+-- Measurements
 CREATE TABLE Measurement (
                              id SERIAL PRIMARY KEY,
                              timestamp TIMESTAMPTZ NOT NULL,
-                             device_location_id INTEGER REFERENCES DeviceLocation(id),
+                             device_id INTEGER REFERENCES Device(id),
+                             area_id INTEGER REFERENCES Area(id),
+                             Latitude DOUBLE PRECISION,
+                             Longitude DOUBLE PRECISION,
                              value DOUBLE PRECISION
 );
 
-
-
--- Vue enrichie Measurement
-CREATE VIEW MeasurementView AS
-SELECT
-    m.id AS measurement_id,
-    m.timestamp,
-    m.value,
-
-    -- Infos capteur
-    d.serial_number AS device_serial,
-    d.model AS device_model,
-    d.manufacturer,
-
-    -- Paramètre mesuré
-    p.name AS parameter_name,
-    p.unit AS parameter_unit,
-
-    -- Infos localisation
-    l.name AS location_name,
-    l.latitude,
-    l.longitude,
-    l.region,
-
-
-   -- kit localisation
-    k.latitude AS kit_latitude,
-    k.longitude AS kit_longitude
-
-
-
-
-FROM Measurement m
-         JOIN DeviceLocation dl ON m.device_location_id = dl.id
-         JOIN Device d ON dl.device_id = d.id
-         JOIN Parameter p ON d.parameter_id = p.id
-         JOIN Location l ON dl.location_id = l.id
-         JOIN Kit k ON dl.kit_id = k.id;
-
--- Rapport enrichi par lieu
+-- Area-based reports
 CREATE TABLE LocationDataReport (
                                     id SERIAL PRIMARY KEY,
                                     location_name TEXT NOT NULL,
@@ -119,74 +76,100 @@ CREATE TABLE LocationDataReport (
 );
 
 -- ========================================
--- 📥 Insertion de données initiales
+-- 👁️ Enriched Measurement View
+-- ========================================
+CREATE VIEW MeasurementView AS
+SELECT
+    m.id AS measurement_id,
+    m.timestamp,
+    m.value,
+
+    -- Device info
+    d.serial_number AS device_serial,
+    d.model AS device_model,
+    d.manufacturer,
+
+    -- Parameter info
+    p.name AS parameter_name,
+    p.unit AS parameter_unit,
+
+    -- Area info
+    a.name AS area_name,
+    a.latitude,
+    a.longitude,
+    a.region,
+
+    -- Kit coordinates
+    k.currentLatitude AS kit_latitude,
+    k.currentLongitude AS kit_longitude
+
+FROM Measurement m
+         JOIN Device d ON m.device_id = d.id
+         JOIN Parameter p ON d.parameter_id = p.id
+         JOIN Area a ON m.area_id = a.id
+         JOIN Kit k ON d.kit_id = k.id;
+
+-- ========================================
+-- 📥 Initial Data Insertion
 -- ========================================
 
--- Paramètres
+-- Parameters
 INSERT INTO Parameter (name, unit) VALUES
-                                       ('température', '°C'),
+                                       ('temperature', '°C'),
                                        ('pH', ''),
-                                       ('turbidité', 'NTU');
+                                       ('turbidity', 'NTU');
 
--- Catégories
+-- Categories
 INSERT INTO DeviceCategory (name) VALUES
-                                      ('Capteur température'),
-                                      ('Capteur pH'),
-                                      ('Capteur multi-paramètre');
+                                      ('Temperature Sensor'),
+                                      ('pH Sensor'),
+                                      ('Multi-parameter Sensor');
 
--- Capteurs
-INSERT INTO Device (category_id, parameter_id, model, serial_number, install_date, manufacturer) VALUES
-                                                                                                     (1, 1, 'TS-100', 'TS100-A1', '2024-04-01', 'SensTech'),     -- température
-                                                                                                     (2, 2, 'PH-200', 'PH200-B1', '2024-04-02', 'AquaProbe');    -- pH
+-- Kits
+INSERT INTO Kit (currentLatitude, currentLongitude) VALUES
+                                                        (41.125, 20.800),
+                                                        (41.098, 20.780);
 
--- Localisations
-INSERT INTO Location (name, latitude, longitude, region) VALUES
-                                                             ('Ohrid Nord', 41.125, 20.800, 'Ohrid'),
-                                                             ('Ohrid Sud', 41.098, 20.780, 'Ohrid');
+-- Devices
+INSERT INTO Device (category_id, parameter_id, model, serial_number, install_date, manufacturer, kit_id) VALUES
+                                                                                                             (1, 1, 'TS-100', 'TS100-A1', '2024-04-01', 'SensTech', 1),
+                                                                                                             (2, 2, 'PH-200', 'PH200-B1', '2024-04-02', 'AquaProbe', 2);
 
-INSERT INTO Kit(latitude, longitude) VALUES
-                                         (41.125, 20.800),
-                                         (41.098, 20.780);
+-- Areas
+INSERT INTO Area (name, latitude, longitude, region) VALUES
+                                                         ('Ohrid North', 41.125, 20.800, 'Ohrid'),
+                                                         ('Ohrid South', 41.098, 20.780, 'Ohrid');
 
--- Déploiements
-INSERT INTO DeviceLocation (device_id, location_id, deployment_date,kit_id) VALUES
-                                                                         (1, 1, '2024-04-05',1),  -- TS100-A1 → Ohrid Nord
-                                                                         (2, 2, '2024-04-06',2);  -- PH200-B1 → Ohrid Sud
+-- Measurements
+INSERT INTO Measurement (timestamp, device_id, area_id,Latitude,Longitude, value) VALUES
+                                                                   (NOW(), 1, 1, 41.125, 20.800, 21.7),
+                                                                   (NOW(), 2, 2,41.098, 20.780, 7.2);
 
--- Mesures
-INSERT INTO Measurement (timestamp, device_location_id, value) VALUES
-                                                                   (NOW(), 1, 21.7),     -- Température
-                                                                   (NOW(), 2, 7.2);      -- pH
-
--- Rapport Ohrid Nord
-INSERT INTO LocationDataReport (location_name, content, raw_data) VALUES (
-                                                                             'Ohrid Nord',
-                                                                             'Résumé : température moyenne = 21.7°C. Aucune anomalie détectée.',
-                                                                             '[
-                                                                               {
-                                                                                 "timestamp": "2024-04-12T10:00:00Z",
-                                                                                 "parameter": "température",
-                                                                                 "value": 21.7,
-                                                                                 "device": "TS100-A1",
-                                                                                 "kit_id": 1
-                                                                               }
-                                                                             ]'::jsonb
-                                                                         );
-
--- Rapport Ohrid Sud
-INSERT INTO LocationDataReport (location_name, content, raw_data) VALUES (
-                                                                             'Ohrid Sud',
-                                                                             'Résumé : pH mesuré à 7.2. Valeur conforme à la norme.',
-                                                                             '[
-                                                                               {
-                                                                                 "timestamp": "2024-04-12T10:00:00Z",
-                                                                                 "parameter": "pH",
-                                                                                 "value": 7.2,
-                                                                                 "device": "PH200-B1",
-                                                                                 "kit_id": 2
-                                                                               }
-                                                                             ]'::jsonb
-                                                                         );
-
-
-
+-- Reports
+INSERT INTO LocationDataReport (location_name, content, raw_data) VALUES
+                                                                      (
+                                                                          'Ohrid North',
+                                                                          'Summary: average temperature = 21.7°C. No anomaly detected.',
+                                                                          '[
+                                                                            {
+                                                                              "timestamp": "2024-04-12T10:00:00Z",
+                                                                              "parameter": "temperature",
+                                                                              "value": 21.7,
+                                                                              "device": "TS100-A1",
+                                                                              "kit_id": 1
+                                                                            }
+                                                                          ]'::jsonb
+                                                                      ),
+                                                                      (
+                                                                          'Ohrid South',
+                                                                          'Summary: pH measured at 7.2. Value is within the acceptable range.',
+                                                                          '[
+                                                                            {
+                                                                              "timestamp": "2024-04-12T10:00:00Z",
+                                                                              "parameter": "pH",
+                                                                              "value": 7.2,
+                                                                              "device": "PH200-B1",
+                                                                              "kit_id": 2
+                                                                            }
+                                                                          ]'::jsonb
+                                                                      );
