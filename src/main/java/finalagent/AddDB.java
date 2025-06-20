@@ -314,7 +314,7 @@ String URL = "jdbc:postgresql://localhost:5432/postgres";
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            // Conversion des coordonnes en BigDecimal avec prcision exacte
+            // Convert coordinates to BigDecimal with exact precision
             BigDecimal preciseLat = BigDecimal.valueOf(newLat);
             BigDecimal preciseLon = BigDecimal.valueOf(newLon);
 
@@ -376,7 +376,7 @@ public void updateLocalCoordinates(double newLat, double newLon) {
 
 
 
-    // Utilitaires internes
+
     private static int getOrInsert(Connection conn, String sql, Object... values) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             for (int i = 0; i < values.length; i++) {
@@ -411,10 +411,10 @@ public void updateLocalCoordinates(double newLat, double newLon) {
    public static void main(String[] args) {
         System.out.println("?? Test de AddDB");
 
-        // 1. Ajouter un Kit
+        // 1. To add a kit
         AddDB.addKit(41.1234, 20.8765);
 
-        // 2. Ajouter un capteur (sensor)
+        // 2. To add a sensor
         AddDB.addSensor(
                 "Temperature Sensor",
                 "TS-200",

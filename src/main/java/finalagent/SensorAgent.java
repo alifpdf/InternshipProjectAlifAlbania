@@ -62,7 +62,7 @@ if (args == null || args.length < 4) {
 
         nextagent();
 
-               // Trouver l'agent avec le plus petit ID
+              // Find the agent with the smallest ID 
         int minId = Integer.MAX_VALUE;
         for (String agentName : agentIpMap.keySet()) {
             int currentId = Integer.parseInt(agentName.replaceAll("[^0-9]", ""));
@@ -337,7 +337,7 @@ private void sendToken() {
                 System.out.println(getLocalName() + " gives token to " + nextAgent);
             }
 
-            // Nettoyage facultatif pour garder pongReplies propre
+           //To clean pongReplies 
             pongReplies.remove(key);
         }
     });

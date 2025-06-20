@@ -47,7 +47,7 @@ public class Main {
 
             System.out.println("Dmarrage sur l'IP locale : " + myIP);
 
-            // Connexion  la base pour obtenir la liste des agents et IPs
+            // Connect to the database to get the list of agents and IPs
             Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT id, ip_adresse FROM disponibilite ORDER BY id");
@@ -97,10 +97,8 @@ public class Main {
 
                         p = new ProfileImpl(firstIp, 60000, null);
                         cc = rt.createAgentContainer(p);
-                        System.out.println("?? Demarrage en tant que container secondaire");
+                        System.out.println("Starting as a secondary container"");
                     }
-
-
                     // Prparation des arguments pour SensorAgent
                     Object[] agentArgs = { nextAgent, agentList.toArray(new String[0]), agentIpMap, isLast };
 
@@ -108,14 +106,14 @@ public class Main {
                     AgentController ac = cc.createNewAgent(agent, "finalagent.SensorAgent", agentArgs);
                     ac.start();
 
-                    System.out.println("Agent " + agent + " lanc sur " + myIP);
+                    System.out.println("Agent " + agent + " launch on " + myIP);
                 }
             }
 
             if (!found) {
-                System.out.println("? Aucune correspondance IP trouve. Aucun agent lanc.");
+                System.out.println("No IP match found. No agent launched.");
             } else {
-                System.out.println("? Configuration termine. Agent lanc localement selon l'IP.");
+                System.out.println("Configuration complete. Agent launched locally based on IP.");
             }
 
         } catch (Exception e) {
