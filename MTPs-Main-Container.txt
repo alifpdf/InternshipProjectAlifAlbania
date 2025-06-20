@@ -1,1 +1,1 @@
-http://Student-laptop:7778/acc
+http://raspberrypi:7778/acc

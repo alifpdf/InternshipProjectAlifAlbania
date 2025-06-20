@@ -6,54 +6,117 @@ import jade.core.Runtime;
 import jade.wrapper.AgentController;
 import jade.wrapper.ContainerController;
 
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.net.InetAddress;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
+import java.util.*;
+import java.net.NetworkInterface;
+import java.net.InetAddress;
+import java.util.Enumeration;
+
 
 public class Main {
+    
+    private static String getLocalIp() {
+    try {
+        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+        while (interfaces.hasMoreElements()) {
+            NetworkInterface ni = interfaces.nextElement();
+            Enumeration<InetAddress> addresses = ni.getInetAddresses();
+            while (addresses.hasMoreElements()) {
+                InetAddress addr = addresses.nextElement();
+                if (!addr.isLoopbackAddress() && addr.getHostAddress().startsWith("192.")) {
+                    return addr.getHostAddress();
+                }
+            }
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+    }
+    return "127.0.0.1"; // Fallback
+}
+    private static final String URL = "jdbc:postgresql://localhost:5432/postgres";
+    private static final String USER = "postgres";
+    private static final String PASSWORD = "1234";
+
     public static void main(String[] args) {
         try {
-            Runtime rt = Runtime.instance();
-            Profile p = new ProfileImpl();
-            p.setParameter(Profile.GUI, "true");
-            p.setParameter(Profile.LOCAL_PORT, "60000");
-            ContainerController cc = rt.createMainContainer(p);
+            String myIP = getLocalIp();
 
-            // Connexion à la base
-            Connection conn =
-                    DriverManager.
-                    getConnection("jdbc:postgresql://localhost:5432/postgres",
-                    "postgres", "1234");
+            System.out.println("Dmarrage sur l'IP locale : " + myIP);
+
+            // Connexion  la base pour obtenir la liste des agents et IPs
+            Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
             Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT id FROM kit ORDER BY id");
+            ResultSet rs = stmt.executeQuery("SELECT id, ip_adresse FROM disponibilite ORDER BY id");
 
-            List<String> agentNames = new ArrayList<>();
+            Map<String, String> agentIpMap = new LinkedHashMap<>();
             while (rs.next()) {
-                int id = rs.getInt("id");
-                agentNames.add("Z" + id);
+                String id = rs.getString("id");
+                String ip = rs.getString("ip_adresse");
+                String agentName = "Z" + id;
+                agentIpMap.put(agentName, ip);
             }
+            conn.close();
 
-            String[] allAgents = agentNames.toArray(new String[0]);
+            List<String> agentList = new ArrayList<>(agentIpMap.keySet());
 
-            for (int i = 0; i < allAgents.length; i++) {
-                String currentAgent = allAgents[i];
-                String nextAgent = allAgents[(i + 1) % allAgents.length];
-                Boolean lastAgent = false;
+            // Vrification si un agent doit tre lanc sur cette IP
+            boolean found = false;
+            for (int i = 0; i < agentList.size(); i++) {
+                String agent = agentList.get(i);
+                String ip = agentIpMap.get(agent);
 
-                if(i==allAgents.length-1) {
-                    lastAgent = true;
+                if (ip.equals(myIP)) {
+                    found = true;
+                    System.out.println("Tentative de lancement de " + agent + " sur " + myIP + " (attendu: " + ip + ")");
+
+                    // Dtermination du suivant et s'il est le dernier
+                    String nextAgent = agentList.get((i + 1) % agentList.size());
+                    boolean isLast = (i == agentList.size() - 1);
+
+                    // Cration du container
+                    Profile p;
+                    ContainerController cc;
+                    Runtime rt = Runtime.instance();
+
+                    String firstAgent = agentList.get(0);
+                    String firstIp = agentIpMap.get(firstAgent);
+
+                    if (myIP.equals(firstIp)) {
+                        // Cette machine heberge l'agent avec le plus petit ID ? main container
+                        p = new ProfileImpl();
+                        p.setParameter(Profile.GUI, "true");
+                        p.setParameter(Profile.LOCAL_PORT, "60000");
+                        cc = rt.createMainContainer(p);
+                    } else {
+                       
+                    Thread.sleep(5000); 
+
+                        p = new ProfileImpl(firstIp, 60000, null);
+                        cc = rt.createAgentContainer(p);
+                        System.out.println("?? Demarrage en tant que container secondaire");
+                    }
+
+
+                    // Prparation des arguments pour SensorAgent
+                    Object[] agentArgs = { nextAgent, agentList.toArray(new String[0]), agentIpMap, isLast };
+
+                    // Dmarrage
+                    AgentController ac = cc.createNewAgent(agent, "finalagent.SensorAgent", agentArgs);
+                    ac.start();
+
+                    System.out.println("Agent " + agent + " lanc sur " + myIP);
                 }
-
-                Object[] agentArgs = {nextAgent, allAgents,lastAgent };
-
-
-
-                AgentController ac = cc.createNewAgent(currentAgent,
-                        "finalagent.SensorAgent", agentArgs);
-                ac.start();
             }
 
-            System.out.println("Tous les agents ont été créés dynamiquement à partir des Kits");
+            if (!found) {
+                System.out.println("? Aucune correspondance IP trouve. Aucun agent lanc.");
+            } else {
+                System.out.println("? Configuration termine. Agent lanc localement selon l'IP.");
+            }
 
         } catch (Exception e) {
             e.printStackTrace();

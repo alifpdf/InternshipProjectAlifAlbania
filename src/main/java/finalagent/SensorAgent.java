@@ -7,308 +7,361 @@ import jade.lang.acl.ACLMessage;
 import jade.wrapper.AgentController;
 import jade.wrapper.ContainerController;
 import jade.wrapper.ControllerException;
+import java.math.BigDecimal;
 import jade.wrapper.StaleProxyException;
+import static java.lang.Math.abs;
 
 import java.sql.*;
 import java.time.Instant;
+
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+
+
 
 
 public class SensorAgent extends Agent {
     private Integer idKit;
     private String nextAgent;
     private String[] listagent;
-    private Boolean lastegent;
+    private Map<String, String> agentIpMap;
+    private boolean lastegent;
+    private AddDB addDB;
+private Map<String, Boolean> pongReplies = new HashMap<>();
+
+    private Boolean[] agreeMoving;
 
 
     @Override
     protected void setup() {
+        addDB = new AddDB();
         Object[] args = getArguments();
+if (args == null || args.length < 4) {
+    System.err.println("? Agent " + getLocalName() + " lance sans arguments requis. Arret.");
+    doDelete();
+    return;
+}
+
 
         nextAgent = (String) args[0];
         listagent = (String[]) args[1];
-        String localName = getLocalName().toLowerCase(); // ex: z1
-        idKit = Integer.parseInt(localName.
-                replaceAll("[^0-9]", ""));
+        agentIpMap = (Map<String, String>) args[2];
+        lastegent = (boolean) args[3];
+
+        String localName = getLocalName().toLowerCase();
+        idKit = Integer.parseInt(localName.replaceAll("[^0-9]", ""));
 
 
-        lastegent = (Boolean) args[2];
+        agreeMoving = new Boolean[listagent.length];
+        for (int i = 0; i < listagent.length; i++) {
+            agreeMoving[i] = false;
+        }
+
         nextagent();
 
+               // Trouver l'agent avec le plus petit ID
+        int minId = Integer.MAX_VALUE;
+        for (String agentName : agentIpMap.keySet()) {
+            int currentId = Integer.parseInt(agentName.replaceAll("[^0-9]", ""));
+            if (currentId < minId) {
+                minId = currentId;
+            }
+        }
 
-        if (getLocalName().equals(listagent[0])) {
-            addBehaviour(new WakerBehaviour(this, 2000) {
+        // Si l'agent actuel a le plus petit ID, envoyer le jeton initial
+        if (idKit == minId) {
+            addBehaviour(new WakerBehaviour(this, 30_000) {
                 protected void onWake() {
+                    System.out.println(getLocalName() + " ready to send initial token.");
                     sendToken();
                 }
             });
         }
 
-        addBehaviour(new CyclicBehaviour() {
+
+        
+        
+        
+         addBehaviour(new CyclicBehaviour() {
             public void action() {
                 ACLMessage msg = receive();
 
-                if (msg != null && msg.getContent().equals("TOKEN")) {
-                    System.out.println(getLocalName() + " start");
-                    nextagent();
+                if (msg == null) {
+                    block();
+                    return;
+                }
 
-                    if(lastegent){
-                        if(!isKitCountEqualToAgents(listagent)){
+                String content = msg.getContent();
+                int performative = msg.getPerformative();
+
+                try {
+                    // TOKEN
+                    if (content.equals("TOKEN")) {
+                        System.out.println(getLocalName() + " start");
+                        nextagent();
+
+                        if (lastegent && !addDB.isKitCountEqualToAgents(listagent)) {
                             addAnotherAgent();
                             notifynewPeerrAgent();
                         }
 
-                    }
-
-                    // Checking sensor
-                    if (!hasSensorInDatabase(idKit)) {
-                        System.out.println("Agent " + getLocalName() + " has no sensor. It will pass the token and delete itself.");
-
-                        // Supprimer le kit de la base de données
-                        try (Connection conn = DriverManager.getConnection("jdbc:postgresql://localhost:5432/postgres", "postgres", "1234");
-                             PreparedStatement ps = conn.prepareStatement("DELETE FROM Kit WHERE id = ?")) {
-                            ps.setInt(1, idKit);
-                            int deleted = ps.executeUpdate();
-                            if (deleted > 0) {
-                                System.out.println("Kit ID " + idKit + " deleted from database.");
-                            }
-                        } catch (SQLException e) {
-                            e.printStackTrace();
-                        }
-
-                        notifyPeersAgentDead();  // Notify other agents that this one is dead
-                        sendToken();             // Pass the token to the next agent
-                        doDelete();              // Terminate this agent
-                        return;
-                    }
-
-
-
-
-
-                    SequentialBehaviour sequential = new SequentialBehaviour();
-
-                    // Step 1 - Local measure and save it to database
-                    sequential.addSubBehaviour(new OneShotBehaviour() {
-                        public void action() {
-                            System.out.println(getLocalName() + " local sensor...");
-                            saveMeasurementToDatabase();
-                        }
-                    });
-
-                    // Step 2 - To request to others agent
-                    ParallelBehaviour askPeers = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
-                    for (String peer : listagent) {
-                        if (!peer.equals(getLocalName())) {
-                            askPeers.addSubBehaviour(new OneShotBehaviour() {
-                                public void action() {
-                                    ACLMessage req = new ACLMessage(ACLMessage.REQUEST);
-                                    req.addReceiver(new AID(peer, AID.ISLOCALNAME));
-                                    req.setContent("DONNEE?");
-                                    send(req);
-                                    System.out.println(getLocalName() + " request to " + peer);
-                                }
-                            });
-                        }
-                    }
-                    sequential.addSubBehaviour(askPeers);
-
-                    // Step 3 - To give the token to the next agent
-                    sequential.addSubBehaviour(new WakerBehaviour(myAgent, 3000) {
-                        protected void onWake() {
+                        if (!addDB.hasSensorInDatabase(idKit)) {
+                            System.out.println("Agent " + getLocalName() + " has no sensor. It will pass the token and delete itself.");
+                            addDB.deleteKit(idKit);
+                            notifyPeersAgentDead(getLocalName());
                             sendToken();
+                            doDelete();
+                            return;
                         }
-                    });
 
-                    addBehaviour(sequential);
-                }
-
-                //Each agent is linked to a kit that sends sensor data to the sending agent
-                else if (msg != null && msg.getPerformative() == ACLMessage.REQUEST) {
-                    String result = getLastMeasurementsByKit();
-                    ACLMessage reply = msg.createReply();
-                    reply.setPerformative(ACLMessage.INFORM);
-                    reply.setContent(result);
-                    send(reply);
-                }
-
-                //To update list of agent if one agent died
-                else if (msg != null && msg.getPerformative() == ACLMessage.INFORM &&
-                        msg.getContent().startsWith("DEAD_AGENT:")) {
-
-                    String deadAgent = msg.getContent().split(":")[1];
-                    System.out.println(deadAgent + " is dead. Updating peers (order preserved).");
-
-                    // To delete in saving the order
-                    java.util.List<String> updatedPeers = new java.util.ArrayList<>();
-                    for (String p : listagent) {
-                        if (!p.equals(deadAgent)) {
-                            updatedPeers.add(p);
-                        }
-                    }
-
-                    listagent = updatedPeers.toArray(new String[0]);
-
-
-                }
-                // Update the agent list by adding a new agent if a kit is added to the database
-                else if (msg != null && msg.getPerformative() == ACLMessage.INFORM &&
-                        msg.getContent().startsWith("NEW_AGENT")) {
-                    String URL = "jdbc:postgresql://localhost:5432/postgres";
-                    String USER = "postgres";
-                    String PASSWORD = "1234";
-
-                    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-                         PreparedStatement ps = conn.prepareStatement("SELECT MAX(id) FROM Kit");
-                         ResultSet rs = ps.executeQuery()) {
-
-                        if (rs.next()) {
-                            int lastkit_id = rs.getInt(1);
-
-
-                            // To update the list of agent
-                            listagent = new String[lastkit_id];
-                            for (int i = 0; i < lastkit_id; i++) {
-                                listagent[i] = "z" + (i + 1);
+                        SequentialBehaviour sequential = new SequentialBehaviour();
+                         // Step 1: Local sensor reading
+                        sequential.addSubBehaviour(new OneShotBehaviour() {
+                            public void action() {
+                                System.out.println(getLocalName() + " local sensor...");
+                                addDB.saveMeasurementToDatabase(idKit);
                             }
+                        });
 
+                        // Step 2: Ask for peer data
+                        ParallelBehaviour askPeers = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
+                        for (String peer : listagent) {
+                            if (!peer.equals(getLocalName())) {
+                                askPeers.addSubBehaviour(new OneShotBehaviour() {
+                                    public void action() {
+                                        ACLMessage req = new ACLMessage(ACLMessage.REQUEST);
+                                        req.addReceiver(new AID(peer, AID.ISLOCALNAME));
+                                        req.setContent("DONNEE?");
+                                        send(req);
+                                        System.out.println(getLocalName() + " request to " + peer);
+                                    }
+                                });
+                            }
                         }
+                        sequential.addSubBehaviour(askPeers);
 
-                } catch (SQLException e) {
-                        throw new RuntimeException(e);
+                        // Step 3: Ask for movement approval
+                        Double[] studyLocation = addDB.actualLocationStudy(1);
+                        double[] newPoint= GeoRandomPoint.generateRandomPointAroundCenter(studyLocation[0],studyLocation[1],20);
+                        double distanceCheck = GeoRandomPoint.haversine(studyLocation[0], studyLocation[1], newPoint[0], newPoint[1]);
+                        System.out.printf("?? DEBUG: Point generated (%.10f, %.10f), distance to study center = %.2f m%n",
+                                newPoint[0], newPoint[1], distanceCheck);
+
+                        ParallelBehaviour askPeers2 = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
+                        for (String peer : listagent) {
+                            if (!peer.equals(getLocalName())) {
+                                askPeers2.addSubBehaviour(new OneShotBehaviour() {
+                                    public void action() {
+                                        ACLMessage req = new ACLMessage(ACLMessage.REQUEST);
+                                        req.addReceiver(new AID(peer, AID.ISLOCALNAME));
+                                        req.setContent("Moving data," + newPoint[0] + "," + newPoint[1]);
+                                        send(req);
+                                        System.out.println(getLocalName() + " sending moving data to " + peer);
+                                    }
+                                });
+                            }
+                        }
+                        sequential.addSubBehaviour(askPeers2);
+                        // Step 4: Wait and evaluate agreement
+                        sequential.addSubBehaviour(new WakerBehaviour(myAgent, 5000) {
+                            protected void onWake() {
+                                int numberOfAgree = 0;
+                                for (boolean agree : agreeMoving) {
+                                    if (agree) numberOfAgree++;
+                                }
+
+                                System.out.println(getLocalName() + " received " + numberOfAgree + " agreements out of " + agreeMoving.length);
+
+                                if (numberOfAgree == agreeMoving.length-1) {
+                                    addDB.updateKitCoordinates(idKit, newPoint[0], newPoint[1]);
+                                    System.out.println("Kit updated after consensus.");
+                                } else {
+                                    System.out.println("Not enough consensus for movement.");
+                                }
+
+                                sendToken();
+                            }
+                        });
+
+                        addBehaviour(sequential);
                     }
-                }
+                    
+                    // MOVING DATA
+                   else if ((performative == ACLMessage.REQUEST || performative == ACLMessage.INFORM)
+                            && content.startsWith("Moving data,")) {
 
-                // Read the message sent by other agents from the sending agent
-                else if (msg != null && msg.getPerformative() == ACLMessage.INFORM) {
-                    System.out.println(getLocalName() + " reads : " + msg.getContent());
-                }
+                        System.out.println(getLocalName() + " received Moving data message: " + content);
+                        String[] parts = content.split(",");
 
-                else if (msg != null && msg.getContent().equals("STOP")) {
-                    System.out.println(getLocalName() + " receive the order to delete itself.");
-                    doDelete();
-                }
+                        double latitude = Double.parseDouble(parts[1].trim());
+                        double longitude = Double.parseDouble(parts[2].trim());
+                        Double[] currentLocation = addDB.actualKitLocation();
 
-                else {
-                    block();
+
+                        double distance=GeoRandomPoint.haversine(currentLocation[0],currentLocation[1],latitude,longitude);
+                        ACLMessage reply = msg.createReply();
+                        reply.setPerformative(ACLMessage.INFORM);
+
+                        boolean agree = abs(distance) > 0.65;
+                        System.out.printf("\n?? Distance from centre : %.2f m%n", distance);
+                        reply.setContent("Response:" + agree + ":" + getLocalName());
+                        send(reply);
+
+                        System.out.println(getLocalName() + " is " + (agree ? "far" : "close") + " from the study area.");
+                    }
+
+                    // RESPONSE to movement
+                    else if (performative == ACLMessage.INFORM && content.startsWith("Response:")) {
+                        String[] parts = content.split(":");
+
+                        boolean response = Boolean.parseBoolean(parts[1]);
+                        String agentName = parts[2];
+
+                        for (int i = 0; i < listagent.length; i++) {
+                            if (listagent[i].equals(agentName)) {
+                                agreeMoving[i] = response;
+                                break;
+                            }
+                        }
+                    }
+
+                    // DONNEE?
+                    else if (performative == ACLMessage.REQUEST && content.equals("DONNEE?")) {
+                        String result = addDB.getLastMeasurementsByKit(idKit);
+                        ACLMessage reply = msg.createReply();
+                        reply.setPerformative(ACLMessage.INFORM);
+                        reply.setContent(result);
+                        send(reply);
+                    }
+
+                    // DEAD_AGENT
+                    else if (performative == ACLMessage.INFORM && content.startsWith("DEAD_AGENT:")) {
+                        String deadAgent = content.split(":")[1];
+                        java.util.List<String> updatedPeers = new java.util.ArrayList<>();
+                        for (String p : listagent) {
+                            if (!p.equals(deadAgent)) {
+                                updatedPeers.add(p);
+                            }
+                        }
+                        listagent = updatedPeers.toArray(new String[0]);
+                        System.out.println(getLocalName() + " removed " + deadAgent + " from list.");
+                    }
+
+                    // NEW_AGENT
+                    else if (performative == ACLMessage.INFORM && content.startsWith("NEW_AGENT")) {
+                        listagent = addDB.addnewAgentOnlist(listagent);
+                    }
+
+                    // STOP
+                    else if (content.equals("STOP")) {
+                        System.out.println(getLocalName() + " received STOP. Terminating.");
+                        doDelete();
+                    }
+
+                    // General INFORM
+                  
+                    else if (performative == ACLMessage.REQUEST && content.equals("PING")) {
+    ACLMessage reply = msg.createReply();
+    reply.setPerformative(ACLMessage.INFORM);
+    reply.setContent("PONG");
+    send(reply);
+    System.out.println(getLocalName() + " replied PONG to " + msg.getSender().getLocalName());
+}
+                    else if (performative == ACLMessage.INFORM && content.equals("PONG")) {
+    String sender = msg.getSender().getLocalName().toLowerCase();
+    pongReplies.put(sender, true);
+    System.out.println(getLocalName() + " received PONG from " + sender);
+}
+else if (performative == ACLMessage.INFORM) {
+                        System.out.println(getLocalName() + " reads : " + content);
+                    }
+}
+catch (Exception e) {
+                    e.printStackTrace();
                 }
             }
+            
         });
 
+
+    
     }
 
-    private void sendToken() {
+    
+    
+    
+    /*private void sendToken() {
         ACLMessage token = new ACLMessage(ACLMessage.INFORM);
         token.setContent("TOKEN");
         token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
         send(token);
         System.out.println(getLocalName() + " gives token to " + nextAgent);
-    }
-    private String getLastMeasurementsByKit() {
-        StringBuilder response = new StringBuilder("📊 Measures from kit ID = " + idKit + " :\n");
-        String URL = "jdbc:postgresql://localhost:5432/postgres";
-        String USER = "postgres";
-        String PASSWORD = "1234";
+    }*/
+    
+    
+private void sendToken() {
+    System.out.println(getLocalName() + " trying to send token to " + nextAgent);
 
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-            try (PreparedStatement ps = conn.prepareStatement("""
-            SELECT d.serial_number, m.value, m.timestamp
-            FROM Measurement m
-            JOIN DeviceLocation dl ON m.device_location_id = dl.id
-            JOIN Device d ON dl.device_id = d.id
-            WHERE dl.kit_id = ?
-            AND m.timestamp = (
-                SELECT MAX(m2.timestamp)
-                FROM Measurement m2
-                WHERE m2.device_location_id = dl.id
-            )
-            ORDER BY d.serial_number
-        """)) {
-                ps.setInt(1, idKit);
-                ResultSet rs = ps.executeQuery();
-                while (rs.next()) {
-                    String serial = rs.getString("serial_number");
-                    double value = rs.getDouble("value");
-                    Timestamp ts = rs.getTimestamp("timestamp");
-                    response.append(serial)
-                            .append(" -> ").append(value)
-                            .append(" (").append(ts).append(")\n");
+    String key = nextAgent.toLowerCase();
+    pongReplies.put(key, false); // Reset l'etat de PONG
+
+    ACLMessage ping = new ACLMessage(ACLMessage.REQUEST);
+    ping.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
+    ping.setContent("PING");
+    send(ping);
+    System.out.println(getLocalName() + " sent PING to " + nextAgent);
+
+    addBehaviour(new WakerBehaviour(this, 9000) {
+        protected void onWake() {
+            boolean responded = pongReplies.getOrDefault(key, false);
+
+            if (!responded) {
+                System.out.println("?? " + nextAgent + " did not respond. Marking as DEAD_AGENT.");
+                notifyPeersAgentDead(nextAgent);
+                listagent = removeAgentFromList(listagent, nextAgent);
+                nextagent();
+
+                if (!nextAgent.equals(getLocalName())) {
+                    sendToken();
+                } else {
+                    System.out.println(getLocalName() + " is the last agent remaining. Token retained.");
                 }
+            } else {
+                ACLMessage token = new ACLMessage(ACLMessage.INFORM);
+                token.setContent("TOKEN");
+                token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
+                send(token);
+                System.out.println(getLocalName() + " gives token to " + nextAgent);
             }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.append("Error");
-        }
 
-        return response.toString();
+            // Nettoyage facultatif pour garder pongReplies propre
+            pongReplies.remove(key);
+        }
+    });
+}
+
+
+
+
+ private void notifyPeersAgentDead(String agent) {
+        ACLMessage deathNotice = new ACLMessage(ACLMessage.INFORM);
+        deathNotice.setContent("DEAD_AGENT:" + agent);
+        for (String peer : listagent) {
+            if (!peer.equals(agent)) {
+                deathNotice.addReceiver(new AID(peer, AID.ISLOCALNAME));
+            }
+        }
+        send(deathNotice);// Send the notification message to peers
+        System.out.println(getLocalName() + " has notified others of its termination.");
+
     }
 
 
 
-    private void saveMeasurementToDatabase() {
-        String URL = "jdbc:postgresql://localhost:5432/postgres";
-        String USER = "postgres";
-        String PASSWORD = "1234";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-
-            try (PreparedStatement ps = conn.prepareStatement("""
-            SELECT dl.id, d.serial_number FROM DeviceLocation dl
-            JOIN Device d ON dl.device_id = d.id
-            WHERE dl.kit_id = ?
-        """)) {
-                ps.setInt(1, idKit);
-                ResultSet rs = ps.executeQuery();
-
-                while (rs.next()) {
-                    int deviceLocationId = rs.getInt("id");
-                    String serialNumber = rs.getString("serial_number");
-
-                    // Valeur aléatoire entre 1 et 10
-                    double value = 1 + Math.random() * 9;
-
-                    try (PreparedStatement insert = conn.prepareStatement("""
-                    INSERT INTO Measurement (timestamp, device_location_id, value)
-                    VALUES (?, ?, ?)
-                """)) {
-                        insert.setTimestamp(1, Timestamp.from(Instant.now()));
-                        insert.setInt(2, deviceLocationId);
-                        insert.setDouble(3, value);
-                        insert.executeUpdate();
-                        System.out.println("data saved by " + serialNumber + " with value=" + value);
-                    }
-                }
-            }
-
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-    }
-
-
-
-    private boolean hasSensorInDatabase(Integer idKit) {
-        String URL = "jdbc:postgresql://localhost:5432/postgres";
-        String USER = "postgres";
-        String PASSWORD = "1234";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-            String sql = """
-            SELECT 1 FROM DeviceLocation dl
-            JOIN Device d ON dl.device_id = d.id
-            WHERE dl.kit_id = ?
-            LIMIT 1
-        """;
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1,idKit);
-                ResultSet rs = ps.executeQuery();
-                return rs.next(); // true s’il y a au moins une ligne
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-    private void notifyPeersAgentDead() {
+   /* private void notifyPeersAgentDead() {
         ACLMessage deathNotice = new ACLMessage(ACLMessage.INFORM);
         deathNotice.setContent("DEAD_AGENT:" + getLocalName());
         for (String peer : listagent) {
@@ -319,7 +372,7 @@ public class SensorAgent extends Agent {
         send(deathNotice);// Send the notification message to peers
         System.out.println(getLocalName() + " has notified others of its termination.");
 
-    }
+    }*/
 
     private void notifynewPeerrAgent() {
         ACLMessage Notice = new ACLMessage(ACLMessage.INFORM);
@@ -334,57 +387,32 @@ public class SensorAgent extends Agent {
 
     }
 
-    private void nextagent(){
-        String current = getLocalName();
-        int index=0;
-        for (int i = 0; i < listagent.length; i++) {
-            if (listagent[i].equals(current)) {
-                index = i;
-                break;
-            }
-        }
-        String expectedNext = listagent[(index + 1) % listagent.length];
-        if (!nextAgent.equals(expectedNext)) {
-            System.out.println("new nextAgent: " + nextAgent + " -> " + expectedNext);
-            nextAgent = expectedNext;
+    private void nextagent() {
+    String current = getLocalName();
+    int index = -1;
+
+    for (int i = 0; i < listagent.length; i++) {
+        if (listagent[i].equalsIgnoreCase(current)) {
+            index = i;
+            break;
         }
     }
 
-
-    public boolean isKitCountEqualToAgents(String[] listagent) {
-        String URL = "jdbc:postgresql://localhost:5432/postgres";
-        String USER = "postgres";
-        String PASSWORD = "1234";
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM Kit");
-             ResultSet rs = ps.executeQuery()) {
-
-            if (rs.next()) {
-                int kitCount = rs.getInt(1);
-                int agentCount = listagent.length;
-
-
-                return kitCount == agentCount;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        return false;
+    if (index == -1) {
+        System.err.println("ERROR: Agent " + current + " not found in listagent!");
+        return;
     }
 
-    public void addAnotherAgent() {
-        String URL = "jdbc:postgresql://localhost:5432/postgres";
-        String USER = "postgres";
-        String PASSWORD = "1234";
+    String calculatedNext = listagent[(index + 1) % listagent.length];
+    System.out.println(current + " sets nextAgent = " + calculatedNext);
+    nextAgent = calculatedNext;  // force update
+}
 
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement ps = conn.prepareStatement("SELECT MAX(id) FROM Kit");
-             ResultSet rs = ps.executeQuery()) {
 
-            if (rs.next()) {
-                int lastkit_id = rs.getInt(1);
+
+    public void addAnotherAgent() throws SQLException, ControllerException {
+
+                int lastkit_id = addDB.toHavetheLastkit();
                 String newAgentName = "z" + lastkit_id;
 
                 // To update the list of agent
@@ -408,17 +436,20 @@ public class SensorAgent extends Agent {
                 newAgent.start();
 
                 System.out.println("Agent " + newAgentName + " added.");
-            }
 
-        } catch (SQLException | StaleProxyException e) {
-            e.printStackTrace();
-        } catch (ControllerException e) {
-            throw new RuntimeException(e);
-        }
+
     }
 
 
-
+private String[] removeAgentFromList(String[] list, String target) {
+    List<String> updated = new ArrayList<>();
+    for (String agent : list) {
+        if (!agent.equalsIgnoreCase(target)) {
+            updated.add(agent);
+        }
+    }
+    return updated.toArray(new String[0]);
+}
 
 
 
