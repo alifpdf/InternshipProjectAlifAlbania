@@ -1,0 +1,24 @@
+-- Table 1 : DEVICE
+DROP TABLE IF EXISTS device CASCADE;
+CREATE TABLE device (
+    id SERIAL PRIMARY KEY,
+    nom VARCHAR(100) NOT NULL,
+    id_original VARCHAR(100) NOT NULL UNIQUE
+);
+
+-- Table 2 : DISPONIBILITE
+DROP TABLE IF EXISTS disponibilite CASCADE;
+CREATE TABLE disponibilite (
+    id SERIAL PRIMARY KEY,
+    ip_adresse INET NOT NULL UNIQUE
+);
+
+-- Table 3 : LOCATION
+DROP TABLE IF EXISTS location CASCADE;
+CREATE TABLE location (
+    id SERIAL PRIMARY KEY,
+    device_id INTEGER NOT NULL REFERENCES device(id) ON DELETE CASCADE,
+    latitude NUMERIC(16,7) NOT NULL,
+    longitude NUMERIC(16,7) NOT NULL,
+    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
