@@ -61,7 +61,7 @@ public class SensorAgent extends Agent {
 
             // Create a service description that defines what this agent offers
             ServiceDescription sd2 = new ServiceDescription();
-            sd2.setType("sensor"); // Define the service type — all sensor agents should use this common type
+            sd2.setType("sensor"); // Define the service type
 
             // Set a unique name for this service, useful for identifying specific agents 
             sd2.setName("SensorAgent-" + getLocalName());
@@ -257,12 +257,15 @@ public class SensorAgent extends Agent {
                         System.out.println(getLocalName() + " start");
 
                         SequentialBehaviour sequential = new SequentialBehaviour();
-                        sequential.addSubBehaviour(new OneShotBehaviour() {
+                        
+                        /*sequential.addSubBehaviour(new OneShotBehaviour() {
                             public void action() {
                                 updateAgentList();
                                 nextagent();
                             }
                         });
+*/
+
 
                         // Step 1: Local sensor reading
                         sequential.addSubBehaviour(new OneShotBehaviour() {
@@ -272,7 +275,7 @@ public class SensorAgent extends Agent {
                             }
                         });
 
-                        // Step 2: Ask for peer data
+                        // Step 2: Ask for peer sensor data
                         ParallelBehaviour askPeers = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
                         for (String peer : listagent) {
                             if (!peer.equals(getLocalName())) {
@@ -289,20 +292,18 @@ public class SensorAgent extends Agent {
                         }
                         sequential.addSubBehaviour(askPeers);
 
-                        sequential.addSubBehaviour(new OneShotBehaviour() {
-                            public void action() {
-                                updateAgentList();
-                                nextagent();
-                            }
-                        });
+                      
 
                         // Step 3: Ask for movement approval
+                        
+                        //To calculate new position
                         Double[] studyLocation = addDB.actualLocationStudy(1);
                         double[] newPoint= GeoRandomPoint.generateRandomPointAroundCenter(studyLocation[0],studyLocation[1],20);
                         double distanceCheck = GeoRandomPoint.haversine(studyLocation[0], studyLocation[1], newPoint[0], newPoint[1]);
                         System.out.printf("DEBUG: Point generated (%.10f, %.10f), distance to study center = %.2f m%n",
                                 newPoint[0], newPoint[1], distanceCheck);
 
+                        //To ask peers if kit can move
                         ParallelBehaviour askPeers2 = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
                         updateAgentList();
                         for (String peer : listagent) {
@@ -338,6 +339,7 @@ public class SensorAgent extends Agent {
 
 
                                 updateAgentList();
+                                nextagent();
 
                                 sendToken();
                             }
@@ -346,7 +348,7 @@ public class SensorAgent extends Agent {
                         addBehaviour(sequential);
                     }
                     
-                     // DATA?
+                     // To get last measures of sensor from kit
                     else if (content.equals("DATA?")) {
                         String result = addDB.getLastMeasurementsByKit(idKit);
                         ACLMessage reply = msg.createReply();
@@ -371,7 +373,7 @@ public class SensorAgent extends Agent {
                         reply.setPerformative(ACLMessage.INFORM);
 
                         boolean agree = abs(distance) > 0.65;
-                        System.out.printf("\n?? Distance from centre : %.2f m%n", distance);
+                        System.out.printf("\n Distance from centre : %.2f m%n", distance);
                         reply.setContent("Response:" + agree + ":" + getLocalName());
                         send(reply);
 

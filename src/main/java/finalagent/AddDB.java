@@ -9,6 +9,8 @@ import java.time.LocalDate;
 
 
 public class AddDB {
+    
+    //a real server
 
     static String URL = "jdbc:postgresql://192.168.224.130:5432/postgres";
     static String USER = "postgres";
@@ -90,9 +92,10 @@ public class AddDB {
     }
 
     
+    //To get lastResult from one kit
    
     public String getLastMeasurementsByKit(int idKit) {
-        StringBuilder response = new StringBuilder("?? Measures from kit ID = " + idKit + " :\n");
+        StringBuilder response = new StringBuilder(" Measures from kit ID = " + idKit + " :\n");
         ;
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
             try (PreparedStatement ps = conn.prepareStatement("""
