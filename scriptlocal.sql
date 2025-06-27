@@ -16,9 +16,6 @@ CREATE TABLE disponibilite (
 -- Table 3 : LOCATION
 DROP TABLE IF EXISTS location CASCADE;
 CREATE TABLE location (
-    id SERIAL PRIMARY KEY,
-    device_id INTEGER NOT NULL REFERENCES device(id) ON DELETE CASCADE,
     latitude NUMERIC(16,7) NOT NULL,
     longitude NUMERIC(16,7) NOT NULL,
-    date_added TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

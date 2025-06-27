@@ -6,118 +6,79 @@ import jade.core.Runtime;
 import jade.wrapper.AgentController;
 import jade.wrapper.ContainerController;
 
-import java.net.InetAddress;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.Statement;
-import java.util.*;
-import java.net.NetworkInterface;
-import java.net.InetAddress;
-import java.util.Enumeration;
-
-
 public class Main {
-    
-    private static String getLocalIp() {
-    try {
-        Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
-        while (interfaces.hasMoreElements()) {
-            NetworkInterface ni = interfaces.nextElement();
-            Enumeration<InetAddress> addresses = ni.getInetAddresses();
-            while (addresses.hasMoreElements()) {
-                InetAddress addr = addresses.nextElement();
-                if (!addr.isLoopbackAddress() && addr.getHostAddress().startsWith("192.")) {
-                    return addr.getHostAddress();
-                }
-            }
-        }
-    } catch (Exception e) {
-        e.printStackTrace();
-    }
-    return "127.0.0.1"; // Fallback
-}
-    private static final String URL = "jdbc:postgresql://localhost:5432/postgres";
-    private static final String USER = "postgres";
-    private static final String PASSWORD = "1234";
 
     public static void main(String[] args) {
+        
+        
+        boolean a = true;
+       /* String myIP = null;
+        String lastPart = null;
+        */
+        
+        
+        ContainerController cc = null;
+        Runtime rt = Runtime.instance();
+
         try {
-            String myIP = getLocalIp();
+            /*
+            myIP = SimpleIPReader.getLocalIp();
+            a = SimpleIPReader.equality(); // Renvoie true si main container
+            lastPart = myIP.substring(myIP.lastIndexOf('.') + 1);*/
+            
+            
 
-            System.out.println("Dmarrage sur l'IP locale : " + myIP);
-
-            // Connect to the database to get the list of agents and IPs
-            Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-            Statement stmt = conn.createStatement();
-            ResultSet rs = stmt.executeQuery("SELECT id, ip_adresse FROM disponibilite ORDER BY id");
-
-            Map<String, String> agentIpMap = new LinkedHashMap<>();
-            while (rs.next()) {
-                String id = rs.getString("id");
-                String ip = rs.getString("ip_adresse");
-                String agentName = "Z" + id;
-                agentIpMap.put(agentName, ip);
-            }
-            conn.close();
-
-            List<String> agentList = new ArrayList<>(agentIpMap.keySet());
-
-            // Vrification si un agent doit tre lanc sur cette IP
-            boolean found = false;
-            for (int i = 0; i < agentList.size(); i++) {
-                String agent = agentList.get(i);
-                String ip = agentIpMap.get(agent);
-
-                if (ip.equals(myIP)) {
-                    found = true;
-                    System.out.println("Tentative de lancement de " + agent + " sur " + myIP + " (attendu: " + ip + ")");
-
-                    // Dtermination du suivant et s'il est le dernier
-                    String nextAgent = agentList.get((i + 1) % agentList.size());
-                    boolean isLast = (i == agentList.size() - 1);
-
-                    // Cration du container
-                    Profile p;
-                    ContainerController cc;
-                    Runtime rt = Runtime.instance();
-
-                    String firstAgent = agentList.get(0);
-                    String firstIp = agentIpMap.get(firstAgent);
-
-                    if (myIP.equals(firstIp)) {
-                        // Cette machine heberge l'agent avec le plus petit ID ? main container
-                        p = new ProfileImpl();
-                        p.setParameter(Profile.GUI, "true");
-                        p.setParameter(Profile.LOCAL_PORT, "60000");
-                        cc = rt.createMainContainer(p);
-                    } else {
-                       
-                    Thread.sleep(5000); 
-
-                        p = new ProfileImpl(firstIp, 60000, null);
-                        cc = rt.createAgentContainer(p);
-                        System.out.println("Starting as a secondary container"");
-                    }
-                    // Prparation des arguments pour SensorAgent
-                    Object[] agentArgs = { nextAgent, agentList.toArray(new String[0]), agentIpMap, isLast };
-
-                    // Dmarrage
-                    AgentController ac = cc.createNewAgent(agent, "finalagent.SensorAgent", agentArgs);
-                    ac.start();
-
-                    System.out.println("Agent " + agent + " launch on " + myIP);
-                }
-            }
-
-            if (!found) {
-                System.out.println("No IP match found. No agent launched.");
+            if (a) {
+                Profile p = new ProfileImpl("localhost", 60000, null);
+                p.setParameter(Profile.GUI, "true");
+                p.setParameter(Profile.LOCAL_PORT, "60000");
+                
+                p.setParameter(Profile.MTPS, "jade.mtp.http.MessageTransportProtocol(http://0.0.0.0:8888/acc)");
+               cc = rt.createMainContainer(p);
             } else {
-                System.out.println("Configuration complete. Agent launched locally based on IP.");
+                Profile p = new ProfileImpl("192.168.224.130", 60000, null);
+                //p.setParameter(Profile.MTPS, "jade.mtp.http.MessageTransportProtocol(http://" + myIP + ":8888/acc)");
+                cc = rt.createAgentContainer(p);
+                System.out.println("Starting as a secondary container");
             }
+
+            Object[] agentArgs = { a };
+            //AgentController ac = cc.createNewAgent("Z" + lastPart, "finalagent.SensorAgent", agentArgs);
+             AgentController ac = cc.createNewAgent("Z1", "finalagent.SensorAgent", agentArgs);
+            ac.start();
+
+           // System.out.println("Z" + lastPart + " launch on " + myIP);
 
         } catch (Exception e) {
             e.printStackTrace();
+
+
+     /*
+            try {
+                // Si une erreur a eu lieu, tente de relancer un container de secours
+                if (!a) {
+                    Profile p = new ProfileImpl("localhost", 60000, null);
+                    p.setParameter(Profile.GUI, "true");
+                    p.setParameter(Profile.LOCAL_PORT, "60000");
+                    p.setParameter(Profile.MTPS, "jade.mtp.http.MessageTransportProtocol(http://" + myIP + ":8888/acc)");
+                    cc = rt.createMainContainer(p);
+                } else {
+                    Profile p = new ProfileImpl("192.168.224.131", 60000, null);
+                    p.setParameter(Profile.MTPS, "jade.mtp.http.MessageTransportProtocol(http://" + myIP + ":8888/acc)");
+                    cc = rt.createAgentContainer(p);
+                    System.out.println("Starting as a secondary container");
+                }
+
+                Object[] agentArgs = { !a };
+                AgentController ac = cc.createNewAgent("Z" + lastPart, "finalagent.SensorAgent", agentArgs);
+                ac.start();
+
+                System.out.println("Z" + lastPart + " recovery launch on " + myIP);
+            } catch (Exception inner) {
+                inner.printStackTrace();
+            }
+            
+            */
         }
     }
 }

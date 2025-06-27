@@ -1,19 +1,16 @@
 package finalagent;
 
-import java.sql.*;
-import java.time.LocalDate;
-import java.time.Instant;
-import static java.lang.Math.abs;
 import java.math.BigDecimal;
 import java.sql.*;
-import java.time.LocalDate;
 import java.time.Instant;
+import java.time.LocalDate;
+
 
 
 
 public class AddDB {
 
-     static String URL = "jdbc:postgresql://192.168.0.101:5432/postgres";
+    static String URL = "jdbc:postgresql://192.168.224.130:5432/postgres";
     static String USER = "postgres";
     static String PASSWORD = "1234";
 
@@ -41,8 +38,8 @@ public class AddDB {
         }
     }
 
-    
-     public static void addSensor(String nameCategory, String nameModel, Date date,
+
+    public static void addSensor(String nameCategory, String nameModel, Date date,
                                  String manufacturer, String serialNumber,
                                  String parameterName, String unit, Integer kit_id) {
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
@@ -91,48 +88,12 @@ public class AddDB {
             e.printStackTrace();
         }
     }
+
     
-     public boolean hasSensorInDatabase(Integer idKit) {
-
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
-            String sql = """
-            SELECT 1 FROM Device d
-            WHERE d.kit_id = ?
-            LIMIT 1
-        """;
-            try (PreparedStatement ps = conn.prepareStatement(sql)) {
-                ps.setInt(1,idKit);
-                ResultSet rs = ps.executeQuery();
-                return rs.next(); // true sil y a au moins une ligne
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return false;
-        }
-    }
-    public boolean isKitCountEqualToAgents(String[] listagent) {
-
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement ps = conn.prepareStatement("SELECT COUNT(*) FROM Kit");
-             ResultSet rs = ps.executeQuery()) {
-
-            if (rs.next()) {
-                int kitCount = rs.getInt(1);
-                int agentCount = listagent.length;
-
-
-                return kitCount == agentCount;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
-
-        return false;
-    }
+   
     public String getLastMeasurementsByKit(int idKit) {
         StringBuilder response = new StringBuilder("?? Measures from kit ID = " + idKit + " :\n");
-       ;
+        ;
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
             try (PreparedStatement ps = conn.prepareStatement("""
             SELECT d.serial_number, m.value, m.timestamp
@@ -164,27 +125,27 @@ public class AddDB {
 
         return response.toString();
     }
-public Double[] actualKitLocation() {
-    String sql = "SELECT latitude, longitude FROM location LIMIT 1";
-String URL = "jdbc:postgresql://localhost:5432/postgres";
-    String USER = "postgres";
-    String PASSWORD = "1234";
-    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-         PreparedStatement ps = conn.prepareStatement(sql);
-         ResultSet rs = ps.executeQuery()) {
+    public Double[] actualKitLocation() {
+        String sql = "SELECT latitude, longitude FROM location LIMIT 1";
+        String URL = "jdbc:postgresql://localhost:5432/postgres";
+        String USER = "postgres";
+        String PASSWORD = "1234";
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
 
-        if (rs.next()) {
-            BigDecimal lat = rs.getBigDecimal("latitude");
-            BigDecimal lon = rs.getBigDecimal("longitude");
-            return new Double[]{lat.doubleValue(), lon.doubleValue()};
+            if (rs.next()) {
+                BigDecimal lat = rs.getBigDecimal("latitude");
+                BigDecimal lon = rs.getBigDecimal("longitude");
+                return new Double[]{lat.doubleValue(), lon.doubleValue()};
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
 
-    } catch (SQLException e) {
-        e.printStackTrace();
+        return new Double[]{0.0, 0.0}; // fallback
     }
-
-    return new Double[]{0.0, 0.0}; // fallback
-}
 
 
     public Double[] actualLocationStudy(int idLocation) {
@@ -207,8 +168,8 @@ String URL = "jdbc:postgresql://localhost:5432/postgres";
             throw new RuntimeException(e);
         }
     }
-    
-     public void saveMeasurementToDatabase(int idKit) {
+
+    public void saveMeasurementToDatabase(int idKit) {
 
 
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
@@ -249,60 +210,9 @@ String URL = "jdbc:postgresql://localhost:5432/postgres";
         }
     }
 
-    public void deleteKit(int idKit) {
-        // to delete kit from database
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement ps = conn.prepareStatement("DELETE FROM Kit WHERE id = ?")) {
-            ps.setInt(1, idKit);
-            int deleted = ps.executeUpdate();
-            if (deleted > 0) {
-                System.out.println("Kit ID " + idKit + " deleted from database.");
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+    
 
-    }
- public String[] addnewAgentOnlist(String[] listagent) {
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-             PreparedStatement ps = conn.prepareStatement("SELECT MAX(id) FROM Kit");
-             ResultSet rs = ps.executeQuery()) {
-
-            if (rs.next()) {
-                int lastkit_id = rs.getInt(1);
-
-
-                // To update the list of agent
-                listagent = new String[lastkit_id];
-                for (int i = 0; i < lastkit_id; i++) {
-                    listagent[i] = "z" + (i + 1);
-                }
-                return listagent;
-
-            }
-
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        }
-        return listagent;
-    }
-
-    public int toHavetheLastkit() throws SQLException {
-        int lastkit_id=0;
-        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-
-             PreparedStatement ps = conn.prepareStatement("SELECT MAX(id) FROM Kit");
-             ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-                lastkit_id = rs.getInt(1);
-
-            }
-        }
-        return lastkit_id;
-    }
-
-
- public void updateKitCoordinates(int kitId, double newLat, double newLon) {
+    public void updateKitCoordinates(int kitId, double newLat, double newLon) {
 
 
         String sql = """
@@ -324,11 +234,11 @@ String URL = "jdbc:postgresql://localhost:5432/postgres";
 
             int affected = ps.executeUpdate();
             if (affected > 0) {
-                
+
                 System.out.println("Kit ID " + kitId + " updated to new position (" + preciseLat + ", " + preciseLon + ")");
-                
-                 updateLocalCoordinates(newLat,newLon) ;
-                
+
+                updateLocalCoordinates(newLat,newLon) ;
+
             } else {
                 System.out.println("No kit found with ID = " + kitId);
             }
@@ -336,40 +246,40 @@ String URL = "jdbc:postgresql://localhost:5432/postgres";
         } catch (SQLException e) {
             e.printStackTrace();
         }
-        
-        
-        
+
+
+
     }
-public void updateLocalCoordinates(double newLat, double newLon) {
-    String updateSql = """
+    public void updateLocalCoordinates(double newLat, double newLon) {
+        String updateSql = """
         UPDATE location
         SET latitude = ?, longitude = ?
     """;
 
-    String URL = "jdbc:postgresql://localhost:5432/postgres";
-    String USER = "postgres";
-    String PASSWORD = "1234";
+        String URL = "jdbc:postgresql://localhost:5432/postgres";
+        String USER = "postgres";
+        String PASSWORD = "1234";
 
-    try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
-         PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
+        try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD);
+             PreparedStatement updatePs = conn.prepareStatement(updateSql)) {
 
-        BigDecimal preciseLat = BigDecimal.valueOf(newLat);
-        BigDecimal preciseLon = BigDecimal.valueOf(newLon);
+            BigDecimal preciseLat = BigDecimal.valueOf(newLat);
+            BigDecimal preciseLon = BigDecimal.valueOf(newLon);
 
-        updatePs.setBigDecimal(1, preciseLat);
-        updatePs.setBigDecimal(2, preciseLon);
+            updatePs.setBigDecimal(1, preciseLat);
+            updatePs.setBigDecimal(2, preciseLon);
 
-        int affected = updatePs.executeUpdate();
-        if (affected > 0) {
-            System.out.println("? local coordinates updated");
-        } else {
-            System.out.println("? No row updated. Table may be empty.");
+            int affected = updatePs.executeUpdate();
+            if (affected > 0) {
+                System.out.println("? local coordinates updated");
+            } else {
+                System.out.println("? No row updated. Table may be empty.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
-
-    } catch (SQLException e) {
-        e.printStackTrace();
     }
-}
 
 
 
@@ -399,16 +309,7 @@ public void updateLocalCoordinates(double newLat, double newLon) {
         return -1;
     }
 
-    private static boolean exists(Connection conn, String sql, Object... values) throws SQLException {
-        try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            for (int i = 0; i < values.length; i++) {
-                ps.setObject(i + 1, values[i]);
-            }
-            ResultSet rs = ps.executeQuery();
-            return rs.next();
-        }
-    }
-   public static void main(String[] args) {
+    public static void main(String[] args) {
         System.out.println("?? Test de AddDB");
 
         // 1. To add a kit
