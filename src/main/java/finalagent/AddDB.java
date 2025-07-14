@@ -7,6 +7,12 @@ import java.time.LocalDate;
 
 
 
+import com.fazecast.jSerialComm.*;
+import java.io.InputStream;
+import java.util.Scanner;
+
+
+
 
 public class AddDB {
     
@@ -333,5 +339,193 @@ public class AddDB {
 
         System.out.println("End");
     }
+    
+public void arduino() {
+    SerialPort serialPort = SerialPort.getCommPort("/dev/ttyUSB0");
+    if (serialPort == null) {
+        System.out.println("Port /dev/ttyUSB1 introuvable.");
+        return;
+    }
+
+    serialPort.setBaudRate(9600);
+    serialPort.setComPortTimeouts(SerialPort.TIMEOUT_READ_SEMI_BLOCKING, 0, 0);
+
+    if (!serialPort.openPort()) {
+        System.err.println("Échec de l'ouverture du port.");
+        return;
+    }
+
+    try (InputStream in = serialPort.getInputStream();
+         Scanner scanner = new Scanner(in);
+         Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
+
+        System.out.println("Lecture des mesures...");
+
+        boolean orpReceived = false;
+        boolean phReceived = false;
+        boolean tempReceived = false;
+
+        while (scanner.hasNextLine() && !(orpReceived && phReceived && tempReceived)) {
+            String line = scanner.nextLine().trim();
+            String[] measurements = line.split("/");
+
+            for (String measurement : measurements) {
+                measurement = measurement.trim();
+                if (measurement.startsWith("[") && measurement.endsWith("]")) {
+                    measurement = measurement.substring(1, measurement.length() - 1);
+                    String[] parts = measurement.split(",");
+
+                    if (parts.length == 7) {
+                        String name = parts[0].trim();
+                        String brand = parts[1].trim();
+                        String model = parts[2].trim();
+                        String ref = parts[3].trim();
+                        String value = parts[4].trim();
+                        String unit = parts[5].trim();
+                        String parameter = parts[6].trim();
+
+                        System.out.printf(" %s %s (modèle %s, réf. %s) mesure une valeur de %s %s.%n",
+                                name, brand, model, ref, value, unit);
+
+                        // Insérer les données dans la base de données
+                        insertData(conn, name, brand, model, ref, value, unit, parameter);
+
+                        // Mettre à jour les drapeaux en fonction du type de mesure
+                        if (parameter.equals("redox potential")) {
+                            orpReceived = true;
+                        } else if (parameter.equals("pH")) {
+                            phReceived = true;
+                        } else if (parameter.equals("temperature")) {
+                            tempReceived = true;
+                        }
+                    } else {
+                        System.out.println("Ligne mal formatée : " + measurement);
+                    }
+                } else {
+                    System.out.println("Ligne ignorée : " + measurement);
+                }
+            }
+        }
+    } catch (Exception e) {
+        e.printStackTrace();
+    } finally {
+        serialPort.closePort();
+    }
+}
+
+
+    
+    private static void insertData(Connection conn, String name, String brand, String model, String ref, String value, String unit, String parameter) {
+        try {
+            // Vérifier et insérer la catégorie
+            int categoryId = checkAndInsertCategory(conn, name);
+
+            // Vérifier et insérer le paramètre
+            int parameterId = checkAndInsertParameter(conn, parameter, unit);
+
+            // Vérifier et insérer le capteur
+            int deviceId = checkAndInsertDevice(conn, categoryId, parameterId, brand, model, ref);
+
+            // Insérer la mesure
+            insertMeasurement(conn, deviceId, Double.parseDouble(value), 40.999, 5.04, 1);
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static int checkAndInsertCategory(Connection conn, String categoryName) throws SQLException {
+        String query = "INSERT INTO DeviceCategory (name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM DeviceCategory WHERE name = ?) RETURNING id";
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, categoryName);
+            pstmt.setString(2, categoryName);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("id");
+            } else {
+                query = "SELECT id FROM DeviceCategory WHERE name = ?";
+                try (PreparedStatement pstmt2 = conn.prepareStatement(query)) {
+                    pstmt2.setString(1, categoryName);
+                    ResultSet rs2 = pstmt2.executeQuery();
+                    if (rs2.next()) {
+                        return rs2.getInt("id");
+                    }
+                }
+            }
+        }
+        throw new SQLException("Failed to retrieve category ID.");
+    }
+
+    private static int checkAndInsertParameter(Connection conn, String parameterName, String unit) throws SQLException {
+        String query = "INSERT INTO Parameter (name, unit) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM Parameter WHERE name = ? AND unit = ?) RETURNING id";
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setString(1, parameterName);
+            pstmt.setString(2, unit);
+            pstmt.setString(3, parameterName);
+            pstmt.setString(4, unit);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("id");
+            } else {
+                query = "SELECT id FROM Parameter WHERE name = ? AND unit = ?";
+                try (PreparedStatement pstmt2 = conn.prepareStatement(query)) {
+                    pstmt2.setString(1, parameterName);
+                    pstmt2.setString(2, unit);
+                    ResultSet rs2 = pstmt2.executeQuery();
+                    if (rs2.next()) {
+                        return rs2.getInt("id");
+                    }
+                }
+            }
+        }
+        throw new SQLException("Failed to retrieve parameter ID.");
+    }
+
+    private static int checkAndInsertDevice(Connection conn, int categoryId, int parameterId, String manufacturer, String model, String serialNumber) throws SQLException {
+        String query = "INSERT INTO Device (category_id, parameter_id, model, serial_number, install_date, manufacturer, kit_id) " +
+                "SELECT ?, ?, ?, ?, CURRENT_DATE, ?, 1 " +
+                "WHERE NOT EXISTS (SELECT 1 FROM Device WHERE model = ? AND serial_number = ? AND manufacturer = ?) RETURNING id";
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, categoryId);
+            pstmt.setInt(2, parameterId);
+            pstmt.setString(3, model);
+            pstmt.setString(4, serialNumber);
+            pstmt.setString(5, manufacturer);
+            pstmt.setString(6, model);
+            pstmt.setString(7, serialNumber);
+            pstmt.setString(8, manufacturer);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("id");
+            } else {
+                query = "SELECT id FROM Device WHERE model = ? AND serial_number = ? AND manufacturer = ?";
+                try (PreparedStatement pstmt2 = conn.prepareStatement(query)) {
+                    pstmt2.setString(1, model);
+                    pstmt2.setString(2, serialNumber);
+                    pstmt2.setString(3, manufacturer);
+                    ResultSet rs2 = pstmt2.executeQuery();
+                    if (rs2.next()) {
+                        return rs2.getInt("id");
+                    }
+                }
+            }
+        }
+        throw new SQLException("Failed to retrieve device ID.");
+    }
+
+    private static void insertMeasurement(Connection conn, int deviceId, double value, double latitude, double longitude, int areaId) throws SQLException {
+        String query = "INSERT INTO Measurement (timestamp, device_id, area_id, Latitude, Longitude, value) VALUES (NOW(), ?, ?, ?, ?, ?)";
+        try (PreparedStatement pstmt = conn.prepareStatement(query)) {
+            pstmt.setInt(1, deviceId);
+            pstmt.setInt(2, areaId);
+            pstmt.setDouble(3, latitude);
+            pstmt.setDouble(4, longitude);
+            pstmt.setDouble(5, value);
+            pstmt.executeUpdate();
+        }
+    }
+    
+    
+    
 
 }

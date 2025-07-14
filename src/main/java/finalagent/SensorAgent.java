@@ -8,9 +8,7 @@ import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.lang.acl.ACLMessage;
 
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.IOException;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -23,8 +21,8 @@ import java.util.*;
 
 
 public class SensorAgent extends Agent {
-    
-   
+
+
     private String nextAgent;
     private List<String> listagent = new ArrayList<>();
     private Set<String> blacklist = new HashSet<>();
@@ -33,7 +31,7 @@ public class SensorAgent extends Agent {
     private Set<String> knownAgents = new HashSet<>();
 
 
-    
+
 
 
     private int idKit=1;
@@ -53,7 +51,7 @@ public class SensorAgent extends Agent {
 
 
         try {
-                        // Create a new agent description object used to register with the Directory Facilitator (DF)
+            // Create a new agent description object used to register with the Directory Facilitator (DF)
             DFAgentDescription dfd = new DFAgentDescription();
 
             // Set the unique identifier (AID) of the agent being registered
@@ -63,7 +61,7 @@ public class SensorAgent extends Agent {
             ServiceDescription sd2 = new ServiceDescription();
             sd2.setType("sensor"); // Define the service type
 
-            // Set a unique name for this service, useful for identifying specific agents 
+            // Set a unique name for this service, useful for identifying specific agents
             sd2.setName("SensorAgent-" + getLocalName());
 
             // Add the service description to the agent description
@@ -81,6 +79,8 @@ public class SensorAgent extends Agent {
         }
 
         Object[] args = getArguments();
+        
+        //agent with main container
         if((boolean)args[0]){
             try {
                 Thread.sleep(30_000); // To wait 30 seconds
@@ -96,19 +96,21 @@ public class SensorAgent extends Agent {
                 e.printStackTrace();
             }
 
+//agent with second container
         }else{
 
             updateAgentList();
-            nextagent(); // 
+            nextagent();
             agreeMoving = new Boolean[listagent.size()];
-            
-        }
-        
 
-       
-        
-        
-/*
+        }
+
+
+
+
+//To extract the minimum id according to the name of agent
+
+
         String localName = getLocalName().toLowerCase();
         int idKit = Integer.parseInt(localName.replaceAll("[^0-9]", ""));
 
@@ -121,10 +123,10 @@ public class SensorAgent extends Agent {
             }
         }
 
-       */
+       
+//To make ping to the other agent to check each 30 seconde to ensure that the agents are working
 
 
-/*
         addBehaviour(new TickerBehaviour(this, 30_000) {
             protected void onTick() {
                 try {
@@ -153,6 +155,7 @@ public class SensorAgent extends Agent {
         });
 
 
+//if one agent doesn't respond, it is blacklisted
         addBehaviour(new TickerBehaviour(this, 5_000) {
             protected void onTick() {
                 long now = System.currentTimeMillis();
@@ -166,11 +169,11 @@ public class SensorAgent extends Agent {
                         nextagent();
 
                         System.err.println(agent + " didn't respond to ping. It is blacklisted.");
-                        
-                        
+
+
                          ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
                         notif.setContent("blacklist:" + agent);
-                       
+
 
                         for (String peer : listagent) {
                             if (!peer.equals(getLocalName())) {
@@ -187,7 +190,7 @@ public class SensorAgent extends Agent {
         });
 
 
-*/
+
 
         addBehaviour(new CyclicBehaviour() {
             public void action() {
@@ -203,35 +206,37 @@ public class SensorAgent extends Agent {
 
                 String content = msg.getContent();
                 int performative = msg.getPerformative();
+
                 
-                /*
-                
+                 
+                 //if the message is ping
+
                 if ("ping".equals(msg.getConversationId())) {
-                    
+
                     //To retrieve the agent that responded
                     String sender = msg.getSender().getLocalName();
 
-                    //To check if the agent was blaclisted 
+                    //To check if the agent was blaclisted
                     /*Yes: one considers that the agent is become to alive
                      *
                      * No: one condiders that the agent is ever alive
                      *
                      * */
-                    /*boolean wasBlacklisted = blacklist.remove(sender);
+                    boolean wasBlacklisted = blacklist.remove(sender);
                     pingAwaiting.remove(sender);
 
 
                     //To check that if agent is new or not
 
-                     
+
                     boolean isNewAgent = !knownAgents.contains(sender);
                     knownAgents.add(sender);
 
                     System.out.println(getLocalName() + " confirm " + sender + " is alive.");
 
-                    
+
                     // To determine if the agent is blacklisted or if they are a new agent
-                     
+
                     if (wasBlacklisted || isNewAgent) {
                         System.out.println(getLocalName() + " relaunches the TOKEN for " + sender +
                                         (wasBlacklisted ? " (returned from blacklist)" : " (new agent detected)"));
@@ -246,7 +251,7 @@ public class SensorAgent extends Agent {
                     }
 
                 }
-*/
+
 
 
 
@@ -257,21 +262,32 @@ public class SensorAgent extends Agent {
                         System.out.println(getLocalName() + " start");
 
                         SequentialBehaviour sequential = new SequentialBehaviour();
-                        
-                        /*sequential.addSubBehaviour(new OneShotBehaviour() {
+
+//To ensure that the list is updated
+                        sequential.addSubBehaviour(new OneShotBehaviour() {
                             public void action() {
                                 updateAgentList();
                                 nextagent();
                             }
                         });
-*/
 
 
-                        // Step 1: Local sensor reading
-                        sequential.addSubBehaviour(new OneShotBehaviour() {
+
+                        // Step 0: Local sensor saving
+                       /* sequential.addSubBehaviour(new OneShotBehaviour() {
                             public void action() {
                                 System.out.println(getLocalName() + " local sensor...");
                                 addDB.saveMeasurementToDatabase(idKit);
+                            }
+                        });*/
+                        
+                        
+                        
+                          // Step 1: Local sensor saving
+                     sequential.addSubBehaviour(new OneShotBehaviour() {
+                            public void action() {
+                                System.out.println(getLocalName() + " local sensor...");
+                                addDB.arduino();
                             }
                         });
 
@@ -292,10 +308,10 @@ public class SensorAgent extends Agent {
                         }
                         sequential.addSubBehaviour(askPeers);
 
-                      
+
 
                         // Step 3: Ask for movement approval
-                        
+
                         //To calculate new position
                         Double[] studyLocation = addDB.actualLocationStudy(1);
                         double[] newPoint= GeoRandomPoint.generateRandomPointAroundCenter(studyLocation[0],studyLocation[1],20);
@@ -303,7 +319,7 @@ public class SensorAgent extends Agent {
                         System.out.printf("DEBUG: Point generated (%.10f, %.10f), distance to study center = %.2f m%n",
                                 newPoint[0], newPoint[1], distanceCheck);
 
-                        //To ask peers if kit can move
+                        //To ask peers if kit can move to the new position
                         ParallelBehaviour askPeers2 = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
                         updateAgentList();
                         for (String peer : listagent) {
@@ -338,6 +354,7 @@ public class SensorAgent extends Agent {
                                 }
 
 
+
                                 updateAgentList();
                                 nextagent();
 
@@ -347,8 +364,8 @@ public class SensorAgent extends Agent {
 
                         addBehaviour(sequential);
                     }
-                    
-                     // To get last measures of sensor from kit
+
+                    // To get last measures of sensor from kit
                     else if (content.equals("DATA?")) {
                         String result = addDB.getLastMeasurementsByKit(idKit);
                         ACLMessage reply = msg.createReply();
@@ -372,7 +389,7 @@ public class SensorAgent extends Agent {
                         ACLMessage reply = msg.createReply();
                         reply.setPerformative(ACLMessage.INFORM);
 
-                        boolean agree = abs(distance) > 0.65;
+                        boolean agree = abs(distance) > 0.650;
                         System.out.printf("\n Distance from centre : %.2f m%n", distance);
                         reply.setContent("Response:" + agree + ":" + getLocalName());
                         send(reply);
@@ -394,13 +411,14 @@ public class SensorAgent extends Agent {
                             }
                         }
                     }
-                    
-                    
 
-                   
+
+
+
+
                     
-                    /*
-                    
+                    //to blaclist the unworked agent
+
                     else if (content.startsWith("blacklist:")) {
                         String[] parts = content.split(":");
                         if (parts.length == 2) {
@@ -415,7 +433,7 @@ public class SensorAgent extends Agent {
                     }
 
 
-*/
+
 
 
                     // STOP
@@ -445,139 +463,140 @@ public class SensorAgent extends Agent {
 
 
 
-  /**
- * Builds a search template to find agents offering a "sensor" type service.
- * This template is used with DFService.search(...) to locate sensor agents registered in the Directory Facilitator (DF).
- *
- * @return A DFAgentDescription object configured to search for "sensor" services.
- */
-private DFAgentDescription buildSensorSearchTemplate() {
-    // Create a new agent description template for the search
-    DFAgentDescription template = new DFAgentDescription();
+    /**
+     * Builds a search template to find agents offering a "sensor" type service.
+     * This template is used with DFService.search(...) to locate sensor agents registered in the Directory Facilitator (DF).
+     *
+     * @return A DFAgentDescription object configured to search for "sensor" services.
+     */
+    private DFAgentDescription buildSensorSearchTemplate() {
+        // Create a new agent description template for the search
+        DFAgentDescription template = new DFAgentDescription();
 
-    // Create a service description for the type we want to find
-    ServiceDescription sd5 = new ServiceDescription();
-    sd5.setType("sensor");  // We are searching for services of type "sensor"
+        // Create a service description for the type we want to find
+        ServiceDescription sd5 = new ServiceDescription();
+        sd5.setType("sensor");  // We are searching for services of type "sensor"
 
-    // Add the service description to the agent description template
-    template.addServices(sd5);
+        // Add the service description to the agent description template
+        template.addServices(sd5);
 
-    // Return the template ready to be used with DFService.search(...)
-    return template;
-}
-
-
-   /**
- * Sends a "TOKEN" message to the next agent in the list.
- * Used for coordinating actions in a token-passing system among agents.
- */
-private void sendToken() {
-    // Update the next agent dynamically before sending the token
-    nextagent();
-    // Check if the nextAgent is valid
-    if (nextAgent == null || nextAgent.trim().isEmpty()) {
-        System.err.println(getLocalName() + " - No available agent, TOKEN not sent.");
-        return;
+        // Return the template ready to be used with DFService.search(...)
+        return template;
     }
 
-    // Create an INFORM message with content "TOKEN"
-    ACLMessage token = new ACLMessage(ACLMessage.INFORM);
-    token.setContent("TOKEN");
 
-    // Set the receiver of the message to the next agent
-    token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
-
-    // Send the message to the next agent
-    send(token);
-
-    // Log the action to the console
-    System.out.println(getLocalName() + " gives token to " + nextAgent);
-}
-
-
-
-
-
-
-
-
-   /**
- * Updates the list of active agents by querying the Directory Facilitator (DF).
- * Excludes the current agent and any agents in the blacklist.
- */
-private void updateAgentList() {
-    try {
-        // Search the DF for agents providing a "sensor" service
-        DFAgentDescription[] result = DFService.search(this, buildSensorSearchTemplate());
-
-        // Clear the current list before repopulating it
-        listagent.clear();
-
-        // Iterate over the search results
-        for (DFAgentDescription agentDesc : result) {
-            String name = agentDesc.getName().getLocalName();
-
-            // Add agent to list if it's not self and not in blacklist
-            if (!name.equals(getLocalName()) /*&& !blacklist.contains(name)*/) {
-                listagent.add(name);
-            }
+    /**
+     * Sends a "TOKEN" message to the next agent in the list.
+     * Used for coordinating actions in a token-passing system among agents.
+     */
+    private void sendToken() {
+        // Update the next agent dynamically before sending the token
+        nextagent();
+        // Check if the nextAgent is valid
+        if (nextAgent == null || nextAgent.trim().isEmpty()) {
+            System.err.println(getLocalName() + " - No available agent, TOKEN not sent.");
+            return;
         }
 
-        // Display the updated list of agents
-        System.out.println(getLocalName() + " - List of agent after update : " + listagent);
+        // Create an INFORM message with content "TOKEN"
+        ACLMessage token = new ACLMessage(ACLMessage.INFORM);
+        token.setContent("TOKEN");
 
-    } catch (Exception e) {
-        System.err.println("Error updating listagent from DF: " + e.getMessage());
-        e.printStackTrace();
+        // Set the receiver of the message to the next agent
+        token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
+
+        // Send the message to the next agent
+        send(token);
+
+        // Log the action to the console
+        System.out.println(getLocalName() + " gives token to " + nextAgent);
     }
-}
 
 
 
-   /**
- * Determines the next agent in the logical ring based on alphabetical order.
- */
-public void nextagent() {
-    try {
-        List<String> agentNames = new ArrayList<>();
 
-        // Filter out blacklisted agents from the list
-        for (String name : listagent) {
-            
+
+
+
+
+    /**
+     * Updates the list of active agents by querying the Directory Facilitator (DF).
+     * Excludes the current agent and any agents in the blacklist.
+     */
+    private void updateAgentList() {
+        try {
+            // Search the DF for agents providing a "sensor" service
+            DFAgentDescription[] result = DFService.search(this, buildSensorSearchTemplate());
+
+            // Clear the current list before repopulating it
+            listagent.clear();
+
+            // Iterate over the search results
+            for (DFAgentDescription agentDesc : result) {
+                String name = agentDesc.getName().getLocalName();
+
+                // Add agent to list if it's not self and not in blacklist
+                if (!name.equals(getLocalName()) && !blacklist.contains(name)) {
+                    listagent.add(name);
+                }
+            }
+
+            // Display the updated list of agents
+            System.out.println(getLocalName() + " - List of agent after update : " + listagent);
+
+        } catch (Exception e) {
+            System.err.println("Error updating listagent from DF: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+
+
+    /**
+     * Determines the next agent in the logical ring based on alphabetical order.
+     */
+    public void nextagent() {
+        try {
+            List<String> agentNames = new ArrayList<>();
+
+            // Filter out blacklisted agents from the list
+            for (String name : listagent) {
+
                 agentNames.add(name);
+
+//to check if the agent is not blacklisted
             
-            /*
             if (!blacklist.contains(name)) {
                 agentNames.add(name);
-            }*/
+            }
+            }
+
+
+
+
+            // Ensure the current agent is included in the list
+            if (!agentNames.contains(getLocalName())) {
+                agentNames.add(getLocalName());
+            }
+
+            // Sort the list alphabetically
+            Collections.sort(agentNames);
+
+            // Find this agent's position in the list
+            int index = agentNames.indexOf(getLocalName());
+
+            // Set the next agent in the ring, or null if alone
+            if (agentNames.size() > 1) {
+                this.nextAgent = agentNames.get((index + 1) % agentNames.size());
+            } else {
+                this.nextAgent = null;
+            }
+
+            System.out.println(getLocalName() + " nextAgent = " + this.nextAgent);
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-        
-        
-        
-
-        // Ensure the current agent is included in the list
-        if (!agentNames.contains(getLocalName())) {
-            agentNames.add(getLocalName());
-        }
-
-        // Sort the list alphabetically
-        Collections.sort(agentNames);
-
-        // Find this agent's position in the list
-        int index = agentNames.indexOf(getLocalName());
-
-        // Set the next agent in the ring, or null if alone
-        if (agentNames.size() > 1) {
-            this.nextAgent = agentNames.get((index + 1) % agentNames.size());
-        } else {
-            this.nextAgent = null;
-        }
-
-        System.out.println(getLocalName() + " nextAgent = " + this.nextAgent);
-    } catch (Exception e) {
-        e.printStackTrace();
     }
-}
 
 
 

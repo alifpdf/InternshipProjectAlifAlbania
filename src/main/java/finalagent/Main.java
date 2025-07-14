@@ -29,7 +29,7 @@ public class Main {
             
 
             if (a) {
-                Profile p = new ProfileImpl("localhost", 60000, null);
+                Profile p = new ProfileImpl("192.168.224.130", 60000, null);
                 p.setParameter(Profile.GUI, "true");
                 p.setParameter(Profile.LOCAL_PORT, "60000");
                 
