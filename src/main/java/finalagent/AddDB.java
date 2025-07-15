@@ -21,6 +21,10 @@ public class AddDB {
     static String URL = "jdbc:postgresql://192.168.224.130:5432/postgres";
     static String USER = "postgres";
     static String PASSWORD = "1234";
+    
+        /**
+     * Adds a new kit to the database if it doesn't already exist at given coordinates.
+     */
 
     public static void addKit(double latitude, double longitude) {
         try (Connection conn = DriverManager.getConnection(URL, USER, PASSWORD)) {
@@ -46,6 +50,9 @@ public class AddDB {
         }
     }
 
+/**
+     * Adds a new sensor to the database, creating its category and parameter if needed.
+     */
 
     public static void addSensor(String nameCategory, String nameModel, Date date,
                                  String manufacturer, String serialNumber,
@@ -67,6 +74,8 @@ public class AddDB {
                 categoryId = getOrSelect(conn,
                         "SELECT id FROM deviceCategory WHERE name = ?", nameCategory);
             }
+            
+             // Check if sensor already exists
 
             try (PreparedStatement check = conn.prepareStatement(
                     "SELECT id FROM device WHERE serial_number = ?")) {
@@ -98,7 +107,9 @@ public class AddDB {
     }
 
     
-    //To get lastResult from one kit
+    /**
+     * Retrieves the last measurement for each sensor attached to the specified kit.
+     */
    
     public String getLastMeasurementsByKit(int idKit) {
         StringBuilder response = new StringBuilder(" Measures from kit ID = " + idKit + " :\n");
@@ -134,6 +145,10 @@ public class AddDB {
 
         return response.toString();
     }
+    
+    /**
+     * Returns the current coordinates from the `location` table 
+     */
     public Double[] actualKitLocation() {
         String sql = "SELECT latitude, longitude FROM location LIMIT 1";
         String URL = "jdbc:postgresql://localhost:5432/postgres";
@@ -156,6 +171,10 @@ public class AddDB {
         return new Double[]{0.0, 0.0}; // fallback
     }
 
+ /**
+     * Retrieves latitude/longitude for a given area.
+     * One choose one for the study area
+     */
 
     public Double[] actualLocationStudy(int idLocation) {
         try(Connection conn=DriverManager.getConnection(URL,USER,PASSWORD)){
@@ -178,6 +197,10 @@ public class AddDB {
         }
     }
 
+  /**
+     * Generates and inserts a random measurement for each device in a kit.
+     * It concerns the agents with second containers
+     */
     public void saveMeasurementToDatabase(int idKit) {
 
 
@@ -220,6 +243,9 @@ public class AddDB {
     }
 
     
+     /**
+     * Updates kit's coordinates 
+     */
 
     public void updateKitCoordinates(int kitId, double newLat, double newLon) {
 
@@ -256,9 +282,10 @@ public class AddDB {
             e.printStackTrace();
         }
 
-
-
     }
+     /**
+     * Updates the `location` table with the latest coordinates from a GPS or movement.
+     */
     public void updateLocalCoordinates(double newLat, double newLon) {
         String updateSql = """
         UPDATE location
@@ -339,7 +366,10 @@ public class AddDB {
 
         System.out.println("End");
     }
-    
+      /**
+     * Reads sensor data from an Arduino connected to a serial port.
+     * It concerns the agent with main container 
+     */
 public void arduino() {
     SerialPort serialPort = SerialPort.getCommPort("/dev/ttyUSB0");
     if (serialPort == null) {
@@ -414,16 +444,19 @@ public void arduino() {
 }
 
 
+/**
+ * To insert data from arduino
+ * */
     
     private static void insertData(Connection conn, String name, String brand, String model, String ref, String value, String unit, String parameter) {
         try {
-            // Vérifier et insérer la catégorie
+            // To check and insert sensor Category
             int categoryId = checkAndInsertCategory(conn, name);
 
-            // Vérifier et insérer le paramètre
+            // To check and insert parameter
             int parameterId = checkAndInsertParameter(conn, parameter, unit);
 
-            // Vérifier et insérer le capteur
+            // To check and insert sensor
             int deviceId = checkAndInsertDevice(conn, categoryId, parameterId, brand, model, ref);
 
             // Insérer la mesure
@@ -433,6 +466,12 @@ public void arduino() {
             e.printStackTrace();
         }
     }
+    
+    
+    /**
+     * To insert or not insert category 
+     * 
+     * */
 
     private static int checkAndInsertCategory(Connection conn, String categoryName) throws SQLException {
         String query = "INSERT INTO DeviceCategory (name) SELECT ? WHERE NOT EXISTS (SELECT 1 FROM DeviceCategory WHERE name = ?) RETURNING id";
@@ -455,6 +494,10 @@ public void arduino() {
         }
         throw new SQLException("Failed to retrieve category ID.");
     }
+
+/**
+ *To insert or not insert parameter 
+ * */
 
     private static int checkAndInsertParameter(Connection conn, String parameterName, String unit) throws SQLException {
         String query = "INSERT INTO Parameter (name, unit) SELECT ?, ? WHERE NOT EXISTS (SELECT 1 FROM Parameter WHERE name = ? AND unit = ?) RETURNING id";
@@ -481,6 +524,9 @@ public void arduino() {
         throw new SQLException("Failed to retrieve parameter ID.");
     }
 
+/**
+ * To insert or not inssert device
+ */
     private static int checkAndInsertDevice(Connection conn, int categoryId, int parameterId, String manufacturer, String model, String serialNumber) throws SQLException {
         String query = "INSERT INTO Device (category_id, parameter_id, model, serial_number, install_date, manufacturer, kit_id) " +
                 "SELECT ?, ?, ?, ?, CURRENT_DATE, ?, 1 " +
@@ -513,6 +559,9 @@ public void arduino() {
         throw new SQLException("Failed to retrieve device ID.");
     }
 
+/**
+ * To save data from arduino at database
+ * */
     private static void insertMeasurement(Connection conn, int deviceId, double value, double latitude, double longitude, int areaId) throws SQLException {
         String query = "INSERT INTO Measurement (timestamp, device_id, area_id, Latitude, Longitude, value) VALUES (NOW(), ?, ?, ?, ?, ?)";
         try (PreparedStatement pstmt = conn.prepareStatement(query)) {

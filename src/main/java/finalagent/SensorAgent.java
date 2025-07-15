@@ -272,8 +272,11 @@ public class SensorAgent extends Agent {
                         });
 
 
-
                         // Step 0: Local sensor saving
+                        /**
+                         * it concerns the agents with second container
+                         * */
+                        
                        /* sequential.addSubBehaviour(new OneShotBehaviour() {
                             public void action() {
                                 System.out.println(getLocalName() + " local sensor...");
