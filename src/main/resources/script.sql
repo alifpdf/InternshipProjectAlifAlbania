@@ -1,192 +1,150 @@
--- ========================================
--- 🚫 Nettoyage
--- ========================================
+-- =======================
+-- Nettoyage complet
+-- =======================
 DROP VIEW IF EXISTS MeasurementView;
-DROP TABLE IF EXISTS Measurement;
-DROP TABLE IF EXISTS DeviceLocation;
-DROP TABLE IF EXISTS Device;
-DROP TABLE IF EXISTS DeviceCategory;
-DROP TABLE IF EXISTS Parameter;
-DROP TABLE IF EXISTS Location;
-DROP TABLE IF EXISTS LocationDataReport;
+DROP TABLE IF EXISTS Measurement CASCADE;
+DROP TABLE IF EXISTS LocalMeasurement CASCADE;
+DROP TABLE IF EXISTS Device CASCADE;
+DROP TABLE IF EXISTS LocalDevice CASCADE;
+DROP TABLE IF EXISTS DeviceCategory CASCADE;
+DROP TABLE IF EXISTS Parameter CASCADE;
+DROP TABLE IF EXISTS Kit CASCADE;
+DROP TABLE IF EXISTS Location CASCADE;
+DROP TABLE IF EXISTS LocationDataReport CASCADE;
 
--- ========================================
--- 🚀 Création des tables
--- ========================================
+-- =======================
+-- Création des tables
+-- =======================
 
--- Catégories de capteurs
+-- 1. Catégories
 CREATE TABLE DeviceCategory (
-                                id SERIAL PRIMARY KEY,
-                                name TEXT NOT NULL UNIQUE
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE
 );
 
--- Paramètres mesurés
+-- 2. Paramètres
 CREATE TABLE Parameter (
-                           id SERIAL PRIMARY KEY,
-                           name TEXT NOT NULL UNIQUE,       -- ex : "température", "pH"
-                           unit TEXT                        -- ex : "°C", "mg/L", "NTU"
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    unit TEXT
 );
 
--- Capteurs
-CREATE TABLE Device (
-                        id SERIAL PRIMARY KEY,
-                        category_id INTEGER REFERENCES DeviceCategory(id),
-                        parameter_id INTEGER REFERENCES Parameter(id),
-                        model TEXT NOT NULL,
-                        serial_number TEXT UNIQUE NOT NULL,
-                        install_date DATE,
-                        manufacturer TEXT
-);
-
--- Lieux
-CREATE TABLE Location (
-                          id SERIAL PRIMARY KEY,
-                          name TEXT NOT NULL UNIQUE,
-                          latitude DOUBLE PRECISION,
-                          longitude DOUBLE PRECISION,
-                          region TEXT
-);
+-- 3. Kits
 CREATE TABLE Kit (
-                     id SERIAL PRIMARY KEY,
-                     latitude DOUBLE PRECISION,
-                     longitude DOUBLE PRECISION
+    id SERIAL PRIMARY KEY,
+    x DOUBLE PRECISION,
+    y DOUBLE PRECISION
 );
 
--- Déploiement capteurs
-CREATE TABLE DeviceLocation (
-                                id SERIAL PRIMARY KEY,
-                                device_id INTEGER REFERENCES Device(id) ON DELETE CASCADE,
-                                location_id INTEGER REFERENCES Location(id) ON DELETE CASCADE,
-                                deployment_date DATE,
-                                kit_id INTEGER REFERENCES Kit(id) ON DELETE CASCADE ,
-                                CONSTRAINT unique_device_location UNIQUE (device_id, location_id, kit_id)
+-- 4. Localisation
+CREATE TABLE Location (
+    x DOUBLE PRECISION,
+    y DOUBLE PRECISION,
+    xa DOUBLE PRECISION,
+    ya DOUBLE PRECISION
 );
 
--- Mesures
+-- 5. LocalDevice
+CREATE TABLE LocalDevice (
+    id SERIAL PRIMARY KEY,
+    name_category TEXT NOT NULL,
+    name_parameter TEXT NOT NULL,
+    name_unit TEXT NOT NULL,
+    model TEXT NOT NULL,
+    serial_number TEXT, -- Nullable
+    install_date DATE,
+    manufacturer TEXT,
+    deployment_date DATE
+);
+
+-- 6. Device (vide, mais structure créée)
+CREATE TABLE Device (
+    id SERIAL PRIMARY KEY,
+    category_id INTEGER REFERENCES DeviceCategory(id),
+    parameter_id INTEGER REFERENCES Parameter(id),
+    model TEXT NOT NULL,
+    serial_number TEXT NOT NULL,
+    install_date DATE,
+    manufacturer TEXT,
+    deployment_date DATE,
+    local_id_device INTEGER,
+    kit_id INTEGER REFERENCES Kit(id) ON DELETE CASCADE
+);
+
+-- 7. Measurement (lié à Device)
 CREATE TABLE Measurement (
-                             id SERIAL PRIMARY KEY,
-                             timestamp TIMESTAMPTZ NOT NULL,
-                             device_location_id INTEGER REFERENCES DeviceLocation(id),
-                             value DOUBLE PRECISION
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL,
+    device_id INTEGER REFERENCES Device(id) ON DELETE CASCADE,
+    value DOUBLE PRECISION
 );
 
-
-
--- Vue enrichie Measurement
-CREATE VIEW MeasurementView AS
-SELECT
-    m.id AS measurement_id,
-    m.timestamp,
-    m.value,
-
-    -- Infos capteur
-    d.serial_number AS device_serial,
-    d.model AS device_model,
-    d.manufacturer,
-
-    -- Paramètre mesuré
-    p.name AS parameter_name,
-    p.unit AS parameter_unit,
-
-    -- Infos localisation
-    l.name AS location_name,
-    l.latitude,
-    l.longitude,
-    l.region,
-
-
-   -- kit localisation
-    k.latitude AS kit_latitude,
-    k.longitude AS kit_longitude
-
-
-
-
-FROM Measurement m
-         JOIN DeviceLocation dl ON m.device_location_id = dl.id
-         JOIN Device d ON dl.device_id = d.id
-         JOIN Parameter p ON d.parameter_id = p.id
-         JOIN Location l ON dl.location_id = l.id
-         JOIN Kit k ON dl.kit_id = k.id;
-
--- Rapport enrichi par lieu
-CREATE TABLE LocationDataReport (
-                                    id SERIAL PRIMARY KEY,
-                                    location_name TEXT NOT NULL,
-                                    generated_at TIMESTAMPTZ DEFAULT NOW(),
-                                    content TEXT,
-                                    raw_data JSONB
+-- 8. LocalMeasurement (lié à LocalDevice)
+CREATE TABLE LocalMeasurement (
+    id SERIAL PRIMARY KEY,
+    timestamp TIMESTAMPTZ NOT NULL,
+    x DOUBLE PRECISION,
+    y DOUBLE PRECISION,
+    id_device INTEGER REFERENCES LocalDevice(id) ON DELETE CASCADE,
+    value DOUBLE PRECISION
 );
 
--- ========================================
--- 📥 Insertion de données initiales
--- ========================================
+-- ================================
+-- Trigger : max 10 mesures / capteur
+-- ================================
+CREATE OR REPLACE FUNCTION limit_10_local_measurements()
+RETURNS TRIGGER AS
+$$
+BEGIN
+    DELETE FROM LocalMeasurement
+    WHERE id IN (
+        SELECT id FROM LocalMeasurement
+        WHERE id_device = NEW.id_device
+        ORDER BY timestamp ASC
+        OFFSET 9
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
--- Paramètres
-INSERT INTO Parameter (name, unit) VALUES
-                                       ('température', '°C'),
-                                       ('pH', ''),
-                                       ('turbidité', 'NTU');
+CREATE TRIGGER trg_limit_10_local_measurements
+BEFORE INSERT ON LocalMeasurement
+FOR EACH ROW
+EXECUTE FUNCTION limit_10_local_measurements();
+
+-- ===========================
+-- Données initiales
+-- ===========================
 
 -- Catégories
 INSERT INTO DeviceCategory (name) VALUES
-                                      ('Capteur température'),
-                                      ('Capteur pH'),
-                                      ('Capteur multi-paramètre');
+    ('Sensor Temperature'),
+    ('Sensor pH'),
+    ('Sensor Multi-parameter');
 
--- Capteurs
-INSERT INTO Device (category_id, parameter_id, model, serial_number, install_date, manufacturer) VALUES
-                                                                                                     (1, 1, 'TS-100', 'TS100-A1', '2024-04-01', 'SensTech'),     -- température
-                                                                                                     (2, 2, 'PH-200', 'PH200-B1', '2024-04-02', 'AquaProbe');    -- pH
+-- Paramètres
+INSERT INTO Parameter (name, unit) VALUES
+    ('Temperature', '°C'),
+    ('pH', ''),
+    ('Turbidity', 'NTU');
 
--- Localisations
-INSERT INTO Location (name, latitude, longitude, region) VALUES
-                                                             ('Ohrid Nord', 41.125, 20.800, 'Ohrid'),
-                                                             ('Ohrid Sud', 41.098, 20.780, 'Ohrid');
+-- Kits
+INSERT INTO Kit (x, y) VALUES
+    (0, 0),
+    (60, 60);
 
-INSERT INTO Kit(latitude, longitude) VALUES
-                                         (41.125, 20.800),
-                                         (41.098, 20.780);
+-- LocalDevice
+INSERT INTO LocalDevice (
+    name_category, name_parameter, name_unit, model, serial_number,
+    install_date, manufacturer, deployment_date
+) VALUES
+    ('Sensor Temperature', 'Temperature', '°C', 'Waterproof DS18B20', 'TEMP-SN-001', '2025-07-25', 'DF Robot', '2024-04-05'),
+    ('Sensor pH', 'pH', '', 'pH Meter V2.0', 'PH-SN-002', '2025-07-25', 'DF Robot', '2024-04-06');
 
--- Déploiements
-INSERT INTO DeviceLocation (device_id, location_id, deployment_date,kit_id) VALUES
-                                                                         (1, 1, '2024-04-05',1),  -- TS100-A1 → Ohrid Nord
-                                                                         (2, 2, '2024-04-06',2);  -- PH200-B1 → Ohrid Sud
+-- Localisation
+INSERT INTO Location (x, y, xa, ya) VALUES (60, 60, 60, 60);
 
--- Mesures
-INSERT INTO Measurement (timestamp, device_location_id, value) VALUES
-                                                                   (NOW(), 1, 21.7),     -- Température
-                                                                   (NOW(), 2, 7.2);      -- pH
-
--- Rapport Ohrid Nord
-INSERT INTO LocationDataReport (location_name, content, raw_data) VALUES (
-                                                                             'Ohrid Nord',
-                                                                             'Résumé : température moyenne = 21.7°C. Aucune anomalie détectée.',
-                                                                             '[
-                                                                               {
-                                                                                 "timestamp": "2024-04-12T10:00:00Z",
-                                                                                 "parameter": "température",
-                                                                                 "value": 21.7,
-                                                                                 "device": "TS100-A1",
-                                                                                 "kit_id": 1
-                                                                               }
-                                                                             ]'::jsonb
-                                                                         );
-
--- Rapport Ohrid Sud
-INSERT INTO LocationDataReport (location_name, content, raw_data) VALUES (
-                                                                             'Ohrid Sud',
-                                                                             'Résumé : pH mesuré à 7.2. Valeur conforme à la norme.',
-                                                                             '[
-                                                                               {
-                                                                                 "timestamp": "2024-04-12T10:00:00Z",
-                                                                                 "parameter": "pH",
-                                                                                 "value": 7.2,
-                                                                                 "device": "PH200-B1",
-                                                                                 "kit_id": 2
-                                                                               }
-                                                                             ]'::jsonb
-                                                                         );
-
-
-
+-- LocalMeasurement
+INSERT INTO LocalMeasurement (timestamp, x, y, id_device, value) VALUES
+    (NOW(), 60, 60, 1, 21.8),
+    (NOW(), 60, 60, 2, 6.9);

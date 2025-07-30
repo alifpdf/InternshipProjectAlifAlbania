@@ -7,14 +7,18 @@ import jade.domain.DFService;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
 import jade.lang.acl.ACLMessage;
+import com.fazecast.jSerialComm.SerialPort;
+import jade.domain.FIPAException;
+
 
 
 import java.util.ArrayList;
 import java.util.List;
 
-
+import finalagent.AddDB;
 
 import static java.lang.Math.abs;
+import static finalagent.AddDB.generateSingleValidPoint;
 
 
 import java.util.*;
@@ -24,22 +28,24 @@ public class SensorAgent extends Agent {
 
 
     private String nextAgent;
-    private List<String> listagent = new ArrayList<>();
+    private List<String> listAgent = new ArrayList<>();
     private Set<String> blacklist = new HashSet<>();
     private Map<String, Long> lastPingSent = new HashMap<>();
     private Set<String> pingAwaiting = new HashSet<>();
     private Set<String> knownAgents = new HashSet<>();
+    
+    private Map<String, Integer> localDevice=new HashMap<>();
+
+    List<double[]> compareList = new ArrayList<>();
 
 
 
 
-
-    private int idKit=1;
+    private int idKit;
 
     private AddDB addDB;
 
 
-    private Boolean[] agreeMoving;
 
 
     @Override
@@ -51,80 +57,71 @@ public class SensorAgent extends Agent {
 
 
         try {
-            // Create a new agent description object used to register with the Directory Facilitator (DF)
+            // Create a new description for this agent
             DFAgentDescription dfd = new DFAgentDescription();
+            dfd.setName(getAID());  // Set the agent's AID (unique ID)
 
-            // Set the unique identifier (AID) of the agent being registered
-            dfd.setName(getAID());
+            // Define the service this agent provides
+            ServiceDescription sd = new ServiceDescription();
+            sd.setType("sensor");  // General type of the service
+            sd.setName("SensorAgent-" + getLocalName());  // Specific name for the service
 
-            // Create a service description that defines what this agent offers
-            ServiceDescription sd2 = new ServiceDescription();
-            sd2.setType("sensor"); // Define the service type
+            dfd.addServices(sd);  // Attach the service to the agent description
 
-            // Set a unique name for this service, useful for identifying specific agents
-            sd2.setName("SensorAgent-" + getLocalName());
-
-            // Add the service description to the agent description
-            dfd.addServices(sd2);
-
-            // Register the agent and its service with the Directory Facilitator (DF)
+            // Register the agent and its services with the DF (Directory Facilitator)
             DFService.register(this, dfd);
 
-            // Confirmation message printed to the console
+            // Confirmation message
             System.out.println(getLocalName() + " registered with DF.");
-
-        } catch (Exception e) {
-            System.err.println("Erreur enregistrement DF: " + e.getMessage());
+    
+        } catch (FIPAException e) {
+            // If registration fails, show the error
+            System.err.println("Failed to register agent with DF: " + e.getMessage());
             e.printStackTrace();
         }
 
+
+
+
+
+
+
         Object[] args = getArguments();
-        
+        idKit = (Integer)args[1];
+
         //agent with main container
         if((boolean)args[0]){
-            try {
-                Thread.sleep(30_000); // To wait 30 seconds
+            
+            addDB.addKit(0,0,idKit);
+            
+                
+                localDevice=addDB.getLocalDeviceIdsFromArduino();
+                addDB.insertLocalDevicesToMain(idKit);
+                addDB.arduino(localDevice,0,0);
+                
+                addDB.TruncateTable();
+                //Thread.sleep(30_000); // To wait 30 seconds
+                
+                addDB.insertLocalDevicesToMain(idKit);
+                
+                
                 updateAgentList();
                 nextagent();
-                agreeMoving = new Boolean[listagent.size()];
-                sendToken();
-                for (int i = 0; i < listagent.size(); i++) {
-                    agreeMoving[i] = false;
-                }
+                
+                //sendToken();
+                
 
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
 
 //agent with second container
         }else{
-
+            addDB.insertLocalDevicesToMain(idKit);
             updateAgentList();
             nextagent();
-            agreeMoving = new Boolean[listagent.size()];
 
         }
 
 
 
-
-//To extract the minimum id according to the name of agent
-
-
-        String localName = getLocalName().toLowerCase();
-        int idKit = Integer.parseInt(localName.replaceAll("[^0-9]", ""));
-
-
-        int minId = Integer.MAX_VALUE;
-        for (String agentName : listagent) {
-            int currentId = Integer.parseInt(agentName.replaceAll("[^0-9]", ""));
-            if (currentId < minId) {
-                minId = currentId;
-            }
-        }
-
-       
-//To make ping to the other agent to check each 30 seconde to ensure that the agents are working
 
 
         addBehaviour(new TickerBehaviour(this, 30_000) {
@@ -135,11 +132,11 @@ public class SensorAgent extends Agent {
                         String agentName = desc.getName().getLocalName();
 
                         if (!agentName.equals(getLocalName())) {
-                            // Teste si l'agent répond à un ping
+                            //To test if the agents respond
                             ACLMessage ping = new ACLMessage(ACLMessage.REQUEST);
                             ping.setConversationId("ping");
                             ping.setReplyWith("ping" + System.currentTimeMillis());
-                            ping.setContent("PING?");
+                         
                             ping.addReceiver(new AID(agentName, AID.ISLOCALNAME));
                             send(ping);
                             //To put TTL
@@ -155,6 +152,8 @@ public class SensorAgent extends Agent {
         });
 
 
+
+
 //if one agent doesn't respond, it is blacklisted
         addBehaviour(new TickerBehaviour(this, 5_000) {
             protected void onTick() {
@@ -163,7 +162,7 @@ public class SensorAgent extends Agent {
                 while (it.hasNext()) {
                     String agent = it.next();
                     long sentTime = lastPingSent.getOrDefault(agent, 0L);
-                    if (now - sentTime > 10_000) { // timeout = 10 secondes
+                    if (now - sentTime > 30_000) { // timeout = 10 secondes
                         blacklist.add(agent);
                         updateAgentList();
                         nextagent();
@@ -171,12 +170,13 @@ public class SensorAgent extends Agent {
                         System.err.println(agent + " didn't respond to ping. It is blacklisted.");
 
 
-                         ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
+                        ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
                         notif.setContent("blacklist:" + agent);
 
 
-                        for (String peer : listagent) {
-                            if (!peer.equals(getLocalName())) {
+                        for (String peer : listAgent) {
+                            if (!getLocalName().equals(peer))   
+{
                                 notif.addReceiver(new AID(peer, AID.ISLOCALNAME));
                             }
                         }
@@ -192,24 +192,54 @@ public class SensorAgent extends Agent {
 
 
 
+      addBehaviour(new TickerBehaviour(this, 30_000) { 
+    @Override
+    protected void onTick() {
+        System.out.println("Local position moving from "+getLocalName());
+
+        addDB.updateLocalValidPoint(); // Updating coordinate (xa, ya)
+        double[] coordinates = addDB.getLastAdjustedCoordinates();
+        
+        System.out.println(getLocalName() + " is saving local measure...");
+       // addDB.saveMeasurementToDatabase(); 
+
+         addDB.arduino(localDevice,coordinates[0],coordinates[1]);
+    }
+});
+
+
+ addBehaviour(new TickerBehaviour(this, 100_000) { 
+    @Override
+    protected void onTick() {
+        System.out.println("Local measurement to global measurement from "+getLocalName());
+        addDB.transferLastLocalMeasurementToMain(idKit);
+        
+    }
+});
+
+
+
+
+
+
         addBehaviour(new CyclicBehaviour() {
             public void action() {
                 ACLMessage msg = receive();
 
-                if (msg == null) {
-                    block(); // Attendre un message
+                                
+                if (msg == null || msg.getContent() == null) {
+                    block();
                     return;
                 }
 
 
-
-
                 String content = msg.getContent();
                 int performative = msg.getPerformative();
+                String conversationId= msg.getConversationId();
 
-                
-                 
-                 //if the message is ping
+                try {
+                    //if the message is ping
+                   
 
                 if ("ping".equals(msg.getConversationId())) {
 
@@ -239,14 +269,11 @@ public class SensorAgent extends Agent {
 
                     if (wasBlacklisted || isNewAgent) {
                         System.out.println(getLocalName() + " relaunches the TOKEN for " + sender +
-                                        (wasBlacklisted ? " (returned from blacklist)" : " (new agent detected)"));
+                                (wasBlacklisted ? " (returned from blacklist)" : " (new agent detected)"));
 
                         updateAgentList();
                         nextagent();
-                        agreeMoving = new Boolean[listagent.size()];
-                        for (int i = 0; i < listagent.size(); i++) {
-                            agreeMoving[i] = false;
-                        }
+                     
                         sendToken();
                     }
 
@@ -256,170 +283,229 @@ public class SensorAgent extends Agent {
 
 
 
-                try {
                     // To receive TOKEN
-                    if (content.equals("TOKEN")) {
-                        System.out.println(getLocalName() + " start");
 
-                        SequentialBehaviour sequential = new SequentialBehaviour();
+                   if ("TOKEN".equals(content)) {
+    System.out.println(getLocalName() + " received TOKEN, scheduling start in 50 sec...");
 
-//To ensure that the list is updated
-                        sequential.addSubBehaviour(new OneShotBehaviour() {
-                            public void action() {
-                                updateAgentList();
-                                nextagent();
-                            }
-                        });
+    addBehaviour(new WakerBehaviour(myAgent, 50_000) {
+        protected void onWake() {
+            System.out.println(getLocalName() + " starts execution after 50 sec delay");
 
+            SequentialBehaviour sequential = new SequentialBehaviour();
 
-                        // Step 0: Local sensor saving
-                        /**
-                         * it concerns the agents with second container
-                         * */
-                        
-                       /* sequential.addSubBehaviour(new OneShotBehaviour() {
-                            public void action() {
-                                System.out.println(getLocalName() + " local sensor...");
-                                addDB.saveMeasurementToDatabase(idKit);
-                            }
-                        });*/
-                        
-                        
-                        
-                          // Step 1: Local sensor saving
-                     sequential.addSubBehaviour(new OneShotBehaviour() {
-                            public void action() {
-                                System.out.println(getLocalName() + " local sensor...");
-                                addDB.arduino();
-                            }
-                        });
+            sequential.addSubBehaviour(new OneShotBehaviour() {
+                public void action() {
+                    updateAgentList();
+                    nextagent();
+                }
+            });
 
-                        // Step 2: Ask for peer sensor data
-                        ParallelBehaviour askPeers = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
-                        for (String peer : listagent) {
-                            if (!peer.equals(getLocalName())) {
-                                askPeers.addSubBehaviour(new OneShotBehaviour() {
-                                    public void action() {
-                                        ACLMessage req = new ACLMessage(ACLMessage.REQUEST);
-                                        req.addReceiver(new AID(peer, AID.ISLOCALNAME));
-                                        req.setContent("DATA?");
-                                        send(req);
-                                        System.out.println(getLocalName() + " request to " + peer);
-                                    }
-                                });
+          
+
+            sequential.addSubBehaviour(new OneShotBehaviour() {
+    @Override
+                public void action() {
+                    double[] coordinates = addDB.getLastAdjustedCoordinates();
+                    String data = addDB.getLastTemperatureWithCoordinates(coordinates[0],coordinates[1]); // "x,y,temp"
+                    String data1 = addDB.getLastPHWithCoordinates(coordinates[0],coordinates[1]);          // "x,y,ph"
+                    Map<Integer, String> others = addDB.getLastOtherMeasurementsWithCoordinates(coordinates[0],coordinates[1]); // id_device -> "x,y,value"
+
+                    String[] parts = data.split(",");
+                    String[] partsPh = data1.split(",");
+
+                    if (parts.length >= 3 && partsPh.length >= 3) {
+                        String temperature = parts[2];
+                        String ph = partsPh[2];
+
+                        // Construire la partie autres capteurs : id=value|id=value|...
+                        StringBuilder othersString = new StringBuilder();
+                        for (Map.Entry<Integer, String> entry : others.entrySet()) {
+                            String[] valParts = entry.getValue().split(",");
+                            if (valParts.length == 3) {
+                                String val = valParts[2]; // seulement la valeur
+                                othersString.append(entry.getKey()).append("=").append(val).append("|");
                             }
                         }
-                        sequential.addSubBehaviour(askPeers);
 
+                        // Retirer le dernier '|'
+                        if (othersString.length() > 0) {
+                            othersString.setLength(othersString.length() - 1);
+                        }
 
-
-                        // Step 3: Ask for movement approval
-
-                        //To calculate new position
-                        Double[] studyLocation = addDB.actualLocationStudy(1);
-                        double[] newPoint= GeoRandomPoint.generateRandomPointAroundCenter(studyLocation[0],studyLocation[1],20);
-                        double distanceCheck = GeoRandomPoint.haversine(studyLocation[0], studyLocation[1], newPoint[0], newPoint[1]);
-                        System.out.printf("DEBUG: Point generated (%.10f, %.10f), distance to study center = %.2f m%n",
-                                newPoint[0], newPoint[1], distanceCheck);
-
-                        //To ask peers if kit can move to the new position
-                        ParallelBehaviour askPeers2 = new ParallelBehaviour(ParallelBehaviour.WHEN_ALL);
-                        updateAgentList();
-                        for (String peer : listagent) {
-                            if (!peer.equals(getLocalName())) {
-                                askPeers2.addSubBehaviour(new OneShotBehaviour() {
-                                    public void action() {
-                                        ACLMessage req = new ACLMessage(ACLMessage.REQUEST);
-                                        req.addReceiver(new AID(peer, AID.ISLOCALNAME));
-                                        req.setContent("Moving data," + newPoint[0] + "," + newPoint[1]);
-                                        send(req);
-                                        System.out.println(getLocalName() + " sending moving data to " + peer);
-                                    }
-                                });
+                        for (String peer : listAgent) {
+                            if (peer != null && !getLocalName().equals(peer)) {
+                                ACLMessage msg = new ACLMessage(ACLMessage.INFORM);
+                                msg.addReceiver(new AID(peer, AID.ISLOCALNAME));
+                                msg.setConversationId("Compare_Data");
+                                msg.setContent(temperature + "," + ph + "," + getLocalName() + "," + othersString); // "21.5,7.1,z2,3=90.0|4=120.5"
+                                send(msg);
+                                System.out.println("Data sent to " + peer + " : " + msg.getContent());
                             }
                         }
-                        sequential.addSubBehaviour(askPeers2);
-                        // Step 4: Wait and evaluate agreement
-                        sequential.addSubBehaviour(new WakerBehaviour(myAgent, 5000) {
-                            protected void onWake() {
-                                int numberOfAgree = 0;
-                                for (boolean agree : agreeMoving) {
-                                    if (agree) numberOfAgree++;
-                                }
-
-                                System.out.println(getLocalName() + " received " + numberOfAgree + " agreements out of " + agreeMoving.length);
-
-                                if (numberOfAgree == agreeMoving.length) {
-                                    addDB.updateKitCoordinates(idKit, newPoint[0], newPoint[1]);
-                                    System.out.println("Kit updated after consensus.");
-                                } else {
-                                    System.out.println("Not enough consensus for movement.");
-                                }
+                    } else {
+                        System.err.println(getLocalName() + " - Invalid data format for temperature or pH.");
+                    }
+                }
+            });
 
 
 
-                                updateAgentList();
-                                nextagent();
+            sequential.addSubBehaviour(new OneShotBehaviour() {
+                @Override
+                public void action() {
+                    try {
+                        double[] maxDiffEntry = null;
+                        double maxDiff = 0;
 
-                                sendToken();
+                        for (double[] entry : compareList) {
+                            double diff = entry[2];
+                            if (diff * diff >= maxDiff * maxDiff) {
+                                maxDiff = diff;
+                                maxDiffEntry = entry;
                             }
-                        });
+                        }
 
-                        addBehaviour(sequential);
+                        if (maxDiffEntry != null) {
+                            double targetX = maxDiffEntry[0];
+                            double targetY = maxDiffEntry[1];
+                            int kitId = (int) maxDiffEntry[3];
+                            String targetAgent = "Z" + kitId;
+
+                            ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+                            msg.setConversationId("Moving data");
+                            msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
+                            msg.setContent(targetX + "," + targetY);
+                            send(msg);
+
+                            System.out.printf("Moving data sent to %s at (%.4f, %.4f)%n", targetAgent, targetX, targetY);
+
+                            myAgent.addBehaviour(new WakerBehaviour(myAgent, 10_000) {
+                                protected void onWake() {
+                                    addDB.updateLocalCoordinates(idKit, targetX, targetY);
+                                    System.out.printf("Kit updated to (%.4f, %.4f)%n", targetX, targetY);
+                                    updateAgentList();
+                                    nextagent();
+                                    sendToken();
+                                }
+                            });
+                        } else {
+                            System.out.println("No difference found. No move needed.");
+                            updateAgentList();
+                            nextagent();
+                            sendToken();
+                        }
+
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+
+            addBehaviour(sequential);
+        }
+    });
+}
+
+
+                   else if ("Compare_Data".equals(conversationId)) {
+   
+
+                        String[] parts = content.split(",", 4);
+                        if (parts.length < 3) {
+                            System.out.println("Invalid format: " + content);
+                            return;
+                        }
+
+                        try {
+                            double temperature = Double.parseDouble(parts[0]);
+                            double ph = Double.parseDouble(parts[1]);
+                            String senderAgent = parts[2];
+                            Map<Integer, Double> otherValues = new HashMap<>();
+
+                            // Parse optional additional sensor values
+                            if (parts.length == 4 && !parts[3].isEmpty()) {
+                                for (String item : parts[3].split("\\|")) {
+                                    String[] keyVal = item.split("=");
+                                    if (keyVal.length == 2) {
+                                        otherValues.put(
+                                            Integer.parseInt(keyVal[0]),
+                                            Double.parseDouble(keyVal[1])
+                                        );
+                                    }
+                                }
+                            }
+
+                            // Call comparison logic
+                            double[] localResult = AddDB.KitMeasureTemperatureCompare(temperature, ph, otherValues);
+
+                            if (localResult != null && localResult.length == 3) {
+                                ACLMessage reply = msg.createReply();
+                                reply.setPerformative(ACLMessage.INFORM);
+                                reply.setConversationId("Difference");
+                                reply.setContent(String.format("Difference,%.3f,%.3f,%.2f,%d,%s",
+                                        localResult[0], localResult[1], localResult[2], idKit, getLocalName()));
+                                send(reply);
+
+                                System.out.printf("Data received from %s ➜ Δ max at (%.3f, %.3f), Δ = %.2f%n",
+                                        senderAgent, localResult[0], localResult[1], localResult[2]);
+                            } else {
+                                System.out.println("⚠ No matching local position found for comparison.");
+                            }
+
+                        } catch (NumberFormatException e) {
+                            System.out.println("Format error in Compare_Data: " + e.getMessage());
+                        }
+                }
+
+
+                    else if ("Difference".equals(conversationId)) {
+                        String[] parts = content.split(",");
+                        if (parts.length == 6 && parts[0].equals("Difference")) {
+                            double x = Double.parseDouble(parts[1]);
+                            double y = Double.parseDouble(parts[2]);
+                            double diff = Double.parseDouble(parts[3]);
+                            int sourceId = Integer.parseInt(parts[4]);
+                            String agentSource = parts[5];
+
+                            // Ajouter dans une liste (tu peux stocker aussi agentSource si besoin ailleurs)
+                            compareList.add(new double[]{x, y, diff, sourceId});
+
+                            System.out.printf(" Résult received from  %s : Δ = %.2f°C à (%.2f, %.2f) [kit ID = %d]%n",
+                                    agentSource, diff, x, y, sourceId);
+                        } else {
+                            System.out.println(" Bad format for 'Difference' recveived : " + content);
+                        }
                     }
 
-                    // To get last measures of sensor from kit
-                    else if (content.equals("DATA?")) {
-                        String result = addDB.getLastMeasurementsByKit(idKit);
-                        ACLMessage reply = msg.createReply();
-                        reply.setPerformative(ACLMessage.INFORM);
-                        reply.setContent(result);
-                        send(reply);
-                    }
+
 
                     // Calculating the distance between the sending agent and the receiving agent
-                    else if (content.startsWith("Moving data,")) {
+                    else if ("Moving data".equals(conversationId)) {
 
-                        System.out.println(getLocalName() + " received Moving data message: " + content);
+
                         String[] parts = content.split(",");
+                        if (parts.length == 3) {
+                            double targetX = Double.parseDouble(parts[1]);
+                            double targetY = Double.parseDouble(parts[2]);
 
-                        double latitude = Double.parseDouble(parts[1].trim());
-                        double longitude = Double.parseDouble(parts[2].trim());
-                        Double[] currentLocation = addDB.actualKitLocation();
+                            // To generate new point on the study area from kit
+                            double[] newPoint = generateSingleValidPoint(targetX, targetY);
 
+                            // To update the new position from the sender kit
+                            addDB.updateKitCoordinates(idKit, newPoint[0], newPoint[1]);
 
-                        double distance=GeoRandomPoint.haversine(currentLocation[0],currentLocation[1],latitude,longitude);
-                        ACLMessage reply = msg.createReply();
-                        reply.setPerformative(ACLMessage.INFORM);
+                            // Sends an acknowledgment response
+                            ACLMessage reply = msg.createReply();
+                            reply.setPerformative(ACLMessage.INFORM);
+                            reply.setContent("Moving done");
+                            send(reply);
 
-                        boolean agree = abs(distance) > 0.650;
-                        System.out.printf("\n Distance from centre : %.2f m%n", distance);
-                        reply.setContent("Response:" + agree + ":" + getLocalName());
-                        send(reply);
-
-                        System.out.println(getLocalName() + " is " + (agree ? "far" : "close") + " from the study area.");
-                    }
-
-                    //authorize agent to move with the agreement of another agent
-                    else if (content.startsWith("Response:")) {
-                        String[] parts = content.split(":");
-
-                        boolean response = Boolean.parseBoolean(parts[1]);
-                        String agentName = parts[2];
-
-                        for (int i = 0; i < listagent.size(); i++) {
-                            if (listagent.get(i).equals(agentName)) {
-                                agreeMoving[i] = response;
-                                break;
-                            }
                         }
+
                     }
 
 
-
-
-
-                    
                     //to blaclist the unworked agent
 
                     else if (content.startsWith("blacklist:")) {
@@ -435,10 +521,6 @@ public class SensorAgent extends Agent {
                         }
                     }
 
-
-
-
-
                     // STOP
                     else if (content.equals("STOP")) {
                         System.out.println(getLocalName() + " received STOP. Terminating.");
@@ -450,6 +532,12 @@ public class SensorAgent extends Agent {
                     else if (performative == ACLMessage.INFORM) {
                         System.out.println(getLocalName() + " reads : " + content);
                     }
+                    
+                
+                
+                else {
+                    System.out.println(getLocalName() + " - received null content.");
+                }
                 }
                 catch (Exception e) {
                     e.printStackTrace();
@@ -466,26 +554,21 @@ public class SensorAgent extends Agent {
 
 
 
+  
     /**
-     * Builds a search template to find agents offering a "sensor" type service.
-     * This template is used with DFService.search(...) to locate sensor agents registered in the Directory Facilitator (DF).
-     *
-     * @return A DFAgentDescription object configured to search for "sensor" services.
-     */
+ * Builds a DF search template to find agents that offer a "sensor" service.
+ * @return A template description for searching sensor-type services.
+ */
     private DFAgentDescription buildSensorSearchTemplate() {
-        // Create a new agent description template for the search
-        DFAgentDescription template = new DFAgentDescription();
+        DFAgentDescription template = new DFAgentDescription(); // Agent search template
 
-        // Create a service description for the type we want to find
-        ServiceDescription sd5 = new ServiceDescription();
-        sd5.setType("sensor");  // We are searching for services of type "sensor"
+        ServiceDescription sd = new ServiceDescription();
+        sd.setType("sensor"); // We are looking for agents offering "sensor" type service
 
-        // Add the service description to the agent description template
-        template.addServices(sd5);
-
-        // Return the template ready to be used with DFService.search(...)
+        template.addServices(sd); // Attach the service type to the search template
         return template;
     }
+
 
 
     /**
@@ -532,7 +615,7 @@ public class SensorAgent extends Agent {
             DFAgentDescription[] result = DFService.search(this, buildSensorSearchTemplate());
 
             // Clear the current list before repopulating it
-            listagent.clear();
+            listAgent.clear();
 
             // Iterate over the search results
             for (DFAgentDescription agentDesc : result) {
@@ -540,12 +623,12 @@ public class SensorAgent extends Agent {
 
                 // Add agent to list if it's not self and not in blacklist
                 if (!name.equals(getLocalName()) && !blacklist.contains(name)) {
-                    listagent.add(name);
+                    listAgent.add(name);
                 }
             }
 
             // Display the updated list of agents
-            System.out.println(getLocalName() + " - List of agent after update : " + listagent);
+            System.out.println(getLocalName() + " - List of agent after update : " + listAgent);
 
         } catch (Exception e) {
             System.err.println("Error updating listagent from DF: " + e.getMessage());
@@ -563,15 +646,13 @@ public class SensorAgent extends Agent {
             List<String> agentNames = new ArrayList<>();
 
             // Filter out blacklisted agents from the list
-            for (String name : listagent) {
-
-                agentNames.add(name);
+            for (String name : listAgent) {
 
 //to check if the agent is not blacklisted
-            
-            if (!blacklist.contains(name)) {
-                agentNames.add(name);
-            }
+
+                if (!blacklist.contains(name)) {
+                    agentNames.add(name);
+                }
             }
 
 
