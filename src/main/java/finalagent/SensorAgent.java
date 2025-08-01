@@ -140,6 +140,7 @@ public class SensorAgent extends Agent {
 
 
         }else{
+             addDB.resetLocalTables();
             addDB.TruncateTable();
             // For other containers, only setup kit and update agent list
             addDB.addKit(xFromKit, yFromKit, idKit);
