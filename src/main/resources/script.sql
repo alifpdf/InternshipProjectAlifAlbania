@@ -10,7 +10,7 @@ DROP TABLE IF EXISTS DeviceCategory CASCADE;
 DROP TABLE IF EXISTS Parameter CASCADE;
 DROP TABLE IF EXISTS Kit CASCADE;
 DROP TABLE IF EXISTS Location CASCADE;
-DROP TABLE IF EXISTS LocationDataReport CASCADE;
+
 
 -- =======================
 -- Création des tables
@@ -38,6 +38,7 @@ CREATE TABLE Kit (
 
 -- 4. Localisation
 CREATE TABLE Location (
+    id INTEGER PRIMARY KEY CHECK (id = 1), -- Empêche d'ajouter plus d'une ligne
     x DOUBLE PRECISION,
     y DOUBLE PRECISION,
     xa DOUBLE PRECISION,
@@ -112,39 +113,14 @@ BEFORE INSERT ON LocalMeasurement
 FOR EACH ROW
 EXECUTE FUNCTION limit_10_local_measurements();
 
--- ===========================
--- Données initiales
--- ===========================
 
--- Catégories
-INSERT INTO DeviceCategory (name) VALUES
-    ('Sensor Temperature'),
-    ('Sensor pH'),
-    ('Sensor Multi-parameter');
+-- Synchronisation des séquences avec les ID insérés manuellement
 
--- Paramètres
-INSERT INTO Parameter (name, unit) VALUES
-    ('Temperature', '°C'),
-    ('pH', ''),
-    ('Turbidity', 'NTU');
+SELECT setval('devicecategory_id_seq', (SELECT MAX(id) FROM devicecategory));
+SELECT setval('parameter_id_seq', (SELECT MAX(id) FROM parameter));
+SELECT setval('kit_id_seq', (SELECT MAX(id) FROM kit));
+SELECT setval('localdevice_id_seq', (SELECT MAX(id) FROM localdevice));
+SELECT setval('device_id_seq', (SELECT MAX(id) FROM device));
+SELECT setval('measurement_id_seq', (SELECT MAX(id) FROM measurement));
+SELECT setval('localmeasurement_id_seq', (SELECT MAX(id) FROM localmeasurement));
 
--- Kits
-INSERT INTO Kit (x, y) VALUES
-    (0, 0),
-    (60, 60);
-
--- LocalDevice
-INSERT INTO LocalDevice (
-    name_category, name_parameter, name_unit, model, serial_number,
-    install_date, manufacturer, deployment_date
-) VALUES
-    ('Sensor Temperature', 'Temperature', '°C', 'Waterproof DS18B20', 'TEMP-SN-001', '2025-07-25', 'DF Robot', '2024-04-05'),
-    ('Sensor pH', 'pH', '', 'pH Meter V2.0', 'PH-SN-002', '2025-07-25', 'DF Robot', '2024-04-06');
-
--- Localisation
-INSERT INTO Location (x, y, xa, ya) VALUES (60, 60, 60, 60);
-
--- LocalMeasurement
-INSERT INTO LocalMeasurement (timestamp, x, y, id_device, value) VALUES
-    (NOW(), 60, 60, 1, 21.8),
-    (NOW(), 60, 60, 2, 6.9);
