@@ -1228,6 +1228,58 @@ public class AddDB {
             e.printStackTrace();
         }
     }
+    
+    
+    
+    public void resetLocalTables() {
+    try (Connection conn = getLocalConnection(); Statement stmt = conn.createStatement()) {
+
+        // Drop the tables if they exist
+        stmt.executeUpdate("DROP TABLE IF EXISTS LocalMeasurement");
+        stmt.executeUpdate("DROP TABLE IF EXISTS LocalDevice");
+
+        // Recreate LocalDevice
+        stmt.executeUpdate("""
+            CREATE TABLE LocalDevice (
+                id SERIAL PRIMARY KEY,
+                name_category TEXT NOT NULL,
+                name_parameter TEXT NOT NULL,
+                name_unit TEXT NOT NULL,
+                model TEXT NOT NULL,
+                serial_number TEXT,
+                install_date DATE,
+                manufacturer TEXT,
+                deployment_date DATE
+            )
+        """);
+
+        // Recreate LocalMeasurement
+        stmt.executeUpdate("""
+            CREATE TABLE LocalMeasurement (
+                id SERIAL PRIMARY KEY,
+                timestamp TIMESTAMPTZ NOT NULL,
+                x DOUBLE PRECISION,
+                y DOUBLE PRECISION,
+                id_device INTEGER REFERENCES LocalDevice(id) ON DELETE CASCADE,
+                value DOUBLE PRECISION
+            )
+        """);
+
+        // Reset sequences to match max(id)
+        stmt.execute("SELECT setval('localdevice_id_seq', COALESCE((SELECT MAX(id) FROM LocalDevice), 1), false)");
+        stmt.execute("SELECT setval('localmeasurement_id_seq', COALESCE((SELECT MAX(id) FROM LocalMeasurement), 1), false)");
+
+        System.out.println("LocalDevice and LocalMeasurement tables reset successfully.");
+
+    } catch (Exception e) {
+        System.err.println("Error resetting local tables: " + e.getMessage());
+        e.printStackTrace();
+    }
+}
+
+
+    
+    
 
 
     public static void insertSecondContainer() {

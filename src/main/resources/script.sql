@@ -36,14 +36,6 @@ CREATE TABLE Kit (
     y DOUBLE PRECISION
 );
 
--- 4. Localisation
-CREATE TABLE Location (
-    id INTEGER PRIMARY KEY CHECK (id = 1), -- Empêche d'ajouter plus d'une ligne
-    x DOUBLE PRECISION,
-    y DOUBLE PRECISION,
-    xa DOUBLE PRECISION,
-    ya DOUBLE PRECISION
-);
 
 -- 5. LocalDevice
 CREATE TABLE LocalDevice (

@@ -108,7 +108,9 @@ public class SensorAgent extends Agent {
 
         // Main container logic: truncate DB, setup kit and devices, delay start
         if((boolean)args[0]){
-            addDB.TruncateTable();
+            
+
+            addDB.resetLocalTables();
             addDB.addKit(xFromKit, yFromKit, idKit);
     
 
