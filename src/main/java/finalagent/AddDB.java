@@ -706,16 +706,16 @@ public class AddDB {
                         sensorIdMap.put(name, localDeviceId);
                         receivedMap.put(name, true);
 
-                        System.out.printf("✅ Sensor '%s' saved with ID %d%n", name, localDeviceId);
+                        System.out.printf("Sensor '%s' saved with ID %d%n", name, localDeviceId);
                     } catch (SQLException e) {
                         System.err.println("Error saving sensor from Arduino: " + name);
                         e.printStackTrace();
                     }
                 }
 
-                // ✅ Tous les capteurs ont été reçus
+                // All sensor are saved
                 if (!receivedMap.isEmpty() && receivedMap.values().stream().allMatch(Boolean::booleanValue)) {
-                    System.out.println("✅ All sensors from Arduino saved successfully.");
+                    System.out.println("All sensors from Arduino saved successfully.");
                     break;
                 }
             }

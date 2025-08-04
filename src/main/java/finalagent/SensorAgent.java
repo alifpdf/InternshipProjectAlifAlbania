@@ -608,9 +608,9 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                                 reply.setPerformative(ACLMessage.INFORM);
                                 reply.setConversationId("Difference");
 
-                                // Format: Difference,xa,ya,diff,idKit,agentName,xFromKit,yFromKit
-                                reply.setContent(String.format(Locale.US, "Difference,%.3f,%.3f,%.2f,%d,%s,%.3f,%.3f",
-                                        localResult[0], localResult[1], localResult[2], idKit, getLocalName(), xFromKit, yFromKit));
+                                // Format: Difference,xa,ya,diff,agentName,xFromKit,yFromKit
+                                reply.setContent(String.format(Locale.US, "Difference,%.3f,%.3f,%.2f,%s,%.3f,%.3f",
+            localResult[0], localResult[1], localResult[2], getLocalName(), xFromKit, yFromKit));
 
                                 send(reply);
 
@@ -629,22 +629,21 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
 
                     else if ("Difference".equals(conversationId)) {
                         String[] parts = content.split(",");
-                        if (parts.length == 8 && parts[0].equals("Difference")) {
+                        if (parts.length == 7 && parts[0].equals("Difference")) {
 
-                            // Extract values from the message: target coordinates, diff, sender ID and agent, origin coordinates
+                           // Extract values from the message: target coordinates, diff, agent name, origin coordinates
                             double xa = Double.parseDouble(parts[1].trim());
                             double ya = Double.parseDouble(parts[2].trim());
                             double diff = Double.parseDouble(parts[3].trim());
-                            int sourceId = Integer.parseInt(parts[4].trim());
-                            String agentSource = parts[5].trim();
-                            double x = Double.parseDouble(parts[6].trim());
-                            double y = Double.parseDouble(parts[7].trim());
+                            String agentSource = parts[4].trim();
+                            double x = Double.parseDouble(parts[5].trim());
+                            double y = Double.parseDouble(parts[6].trim());
 
-                            // Store the result for later selection
-                            compareList.add(new double[]{xa, ya, diff, sourceId, x, y});
+                           // Store the result for later selection
+                            compareList.add(new double[]{xa, ya, diff, x, y});
 
-                            System.out.printf("Result received from %s : Δ = %.2f°C at (%.2f, %.2f) [kit ID = %d]%n",
-                                    agentSource, diff, x, y, sourceId);
+                            System.out.printf("Result received from %s : Δ = %.2f°C at (%.2f, %.2f)%n",
+                                    agentSource, diff, x, y);
                         } else {
                             System.out.println("Bad format for 'Difference' received : " + content);
                         }
