@@ -130,9 +130,7 @@ public class AddDB {
             break;
         }
 
-        if (!updated) {
-            System.out.println(" No valid new location found after 200 attempts.");
-        }
+        
 
     }
 
@@ -657,7 +655,7 @@ public class AddDB {
                 String line = scanner.nextLine().trim();
                 if (line.isEmpty()) continue;
 
-                // Étape 1 — Annonce initiale
+                // Step 1-Sensor from arduino
                 if (!allSensorsAnnounced && line.startsWith("{") && line.endsWith("}") && line.contains("Sensor")) {
                     String[] sensors = line.substring(1, line.length() - 1).split(",");
                     for (String sensor : sensors) {
