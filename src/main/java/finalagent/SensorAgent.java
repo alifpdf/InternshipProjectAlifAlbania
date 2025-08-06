@@ -922,42 +922,47 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
         }
     }
     
-            /**
-         * Blacklists the specified agent and notifies other agents.
-         *
+                /**
+         * Adds an agent to the local blacklist and notifies all other agents about it.
+         * 
          * @param agentName The local name of the agent to blacklist.
          */
         private void blacklistAgentAndNotify(String agentName) {
+            // If the agent is already blacklisted, do nothing
             if (blacklist.contains(agentName)) {
                 System.out.println(getLocalName() + " - Agent " + agentName + " is already blacklisted.");
                 return;
             }
 
-            // Blacklist localy
+            // Add the agent to the local blacklist
             blacklist.add(agentName);
-            listAgent.remove(agentName);
-            
 
-            // to update list of agent
+            // Remove the agent from the current active agents list
+            listAgent.remove(agentName);
+
+            // Update the list of agents from the DF and determine the next agent
             updateAgentList();
             nextagent();
 
             System.err.println(getLocalName() + " - Agent " + agentName + " has been blacklisted.");
 
-            // Message de notification aux autres agents
+            // Create a notification message for other agents about the blacklist update
             ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
-            notif.setConversationId("blacklist");
-            notif.setContent(agentName);
+            notif.setConversationId("blacklist"); // Identifies the purpose of the message
+            notif.setContent(agentName); // The name of the blacklisted agent
 
+            // Send the notification to all active agents except this one
             for (String peer : listAgent) {
                 if (!getLocalName().equals(peer)) {
                     notif.addReceiver(new AID(peer, AID.ISLOCALNAME));
                 }
             }
 
+            // Broadcast the blacklist message
             send(notif);
             System.out.println(getLocalName() + " broadcasted BLACKLIST for " + agentName);
-        }
+}
+
 
 
         private String extractAgentFromMtsError(String msg) {
