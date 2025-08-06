@@ -46,6 +46,9 @@ public class SensorAgent extends Agent {
     // List storing comparison results with other agents
     List<double[]> compareList = new ArrayList<>();
     
+    // Set to store which agents have already sent their Difference
+private Set<String> respondedAgents = new HashSet<>();
+    
     
     private long lastTokenSentTime = 0;
 
@@ -412,6 +415,7 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
     isTokenProcessing = true;
                         // Clear previous comparison results
                         compareList.clear(); 
+                         respondedAgents.clear();
 
                         System.out.println(getLocalName() + " received TOKEN, scheduling start in 20 sec...");
 
@@ -493,76 +497,96 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                                 });
 
 
+                    // Step 3: After collecting responses, compute max difference and send move command
+                    sequential.addSubBehaviour(new Behaviour() {
 
-                                // Step 3: After collecting responses, compute the maximum difference and send the MOVE command
-                                sequential.addSubBehaviour(new Behaviour() {
-                                    @Override
-                                    public void action() {
-                                        // Wait until all responses have been received
-                                        if (compareList.size() >= listAgent.size()) {
-                                            System.out.println(getLocalName() + " - All responses received (" + compareList.size() + "/" + listAgent.size() + ")");
-                                            
-                                            // Calculate the maxDiff
-                                            double[] maxDiffEntry = null;
-                                            double maxDiff = 0;
-                                            for (double[] entry : compareList) {
-                                                double diff = entry[2];
-                                                if (Math.abs(diff) >= Math.abs(maxDiff)) {
-                                                    maxDiff = diff;
-                                                    maxDiffEntry = entry;
-                                                }
-                                            }
+                        private long startTime = System.currentTimeMillis();
+                        private final long TIMEOUT_MS = 20_000; // 20 seconds
 
-                                            // Build a list of unique coordinates
-                                            Set<String> coordinatesSet = new LinkedHashSet<>();
-                                            for (double[] entry : compareList) {
-                                                coordinatesSet.add(entry[4] + ":" + entry[5]);
-                                            }
-                                            String coordBuilder = String.join("|", coordinatesSet);
+                        @Override
+                        public void action() {
+                            boolean allResponses = respondedAgents.size() >= listAgent.size();
 
-                                            if (maxDiffEntry != null) {
-                                                double targetX = maxDiffEntry[0];
-                                                double targetY = maxDiffEntry[1];
-                                                int kitId = (int) maxDiffEntry[3];
-                                                String targetAgent = "Z" + kitId;
+                            boolean timeoutReached = (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
 
-                                                String content = String.format(Locale.US, "%f,%f,%s", targetX, targetY, coordBuilder);
+                            if (allResponses || timeoutReached) {
+                                if (allResponses) {
+                                    System.out.println(getLocalName() + " - All responses received (" 
+                                                       + compareList.size() + "/" + listAgent.size() + ")");
+                                } else {
+                                    System.out.println(getLocalName() + " - Timeout reached after " 
+                                                       + (TIMEOUT_MS / 1000) + "s (" 
+                                                       + compareList.size() + "/" + listAgent.size() + " responses)");
+                                }
 
-                                                ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
-                                                msg.setConversationId("Moving data");
-                                                msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
-                                                msg.setContent(content);
-                                                send(msg);
-                                                System.out.println("Sending MOVE to " + targetAgent + " with path: " + content);
+                                // Find the entry with the maximum absolute difference
+                                double[] maxDiffEntry = null;
+                                double maxDiff = 0;
+                                for (double[] entry : compareList) {
+                                    double diff = entry[2];
+                                    if (Math.abs(diff) >= Math.abs(maxDiff)) {
+                                        maxDiff = diff;
+                                        maxDiffEntry = entry;
+                                    }
+                                }
 
-                                                // Update position and send token after a delay
-                                                myAgent.addBehaviour(new WakerBehaviour(myAgent, 20_000) {
-                                                    protected void onWake() {
-                                                        addDB.updateLocalCoordinates(idKit, targetX, targetY);
-                                                        System.out.printf("Kit updated to (%.4f, %.4f)%n", targetX, targetY);
-                                                        updateAgentList();
-                                                        nextagent();
-                                                        sendToken();
-                                                    }
-                                                });
-                                            } else {
-                                                System.out.println("No difference found. No move needed.");
-                                                updateAgentList();
-                                                nextagent();
-                                                sendToken();
-                                            }
+                                // Build a set of unique coordinates in the format "x:y"
+                                Set<String> coordinatesSet = new LinkedHashSet<>();
+                                for (double[] entry : compareList) {
+                                    coordinatesSet.add(entry[4] + ":" + entry[5]);
+                                }
+                                String coordBuilder = String.join("|", coordinatesSet);
 
-                                            // End this Behaviour
-                                            stop();
+                                if (maxDiffEntry != null) {
+                                    double targetX = maxDiffEntry[0];
+                                    double targetY = maxDiffEntry[1];
+                                    int kitId = (int) maxDiffEntry[3];
+                                    String targetAgent = "Z" + kitId;
+
+                                    // Prepare MOVE message content
+                                    String content = String.format(Locale.US, "%f,%f,%s", 
+                                                                   targetX, targetY, coordBuilder);
+
+                                    // Send the MOVE request to the target agent
+                                    ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+                                    msg.setConversationId("Moving data");
+                                    msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
+                                    msg.setContent(content);
+                                    send(msg);
+                                    System.out.println("Sending MOVE to " + targetAgent + " with path: " + content);
+
+                                    // After 20 seconds, update local coordinates and send the token
+                                    myAgent.addBehaviour(new WakerBehaviour(myAgent, 20_000) {
+                                        protected void onWake() {
+                                            addDB.updateLocalCoordinates(idKit, targetX, targetY);
+                                            System.out.printf("Kit updated to (%.4f, %.4f)%n", targetX, targetY);
+                                            updateAgentList();
+                                            nextagent();
+                                            sendToken();
+                                            isTokenProcessing = false;
                                         }
-                                    }
+                                    });
+                                } else {
+                                    System.out.println("No difference found. No move needed.");
+                                    updateAgentList();
+                                    nextagent();
+                                    sendToken();
+                                    isTokenProcessing = false;
+                                }
 
-                                    @Override
-                                    public boolean done() {
-                                        // This behaviour finishes when the condition is met
-                                        return compareList.size() >= listAgent.size();
-                                    }
-                                });
+                                stop(); // End this Behaviour
+                            }
+                        }
+
+                        @Override
+                        public boolean done() {
+                            // Finish when all responses are received OR when the timeout is reached
+                            return respondedAgents.size() >= listAgent.size() 
+                                || (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
+
+                        }
+                    });
+
 
 
 
@@ -635,30 +659,38 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
 
 
 
-                    else if ("Difference".equals(conversationId)) {
-                        String[] parts = content.split(",");
-                        if (parts.length == 7 && parts[0].equals("Difference")) {
 
-                           // Extract values from the message: target coordinates, diff, agent name, origin coordinates
-                            double xa = Double.parseDouble(parts[1].trim());
-                           double ya = Double.parseDouble(parts[2].trim());
-                            double diff = Double.parseDouble(parts[3].trim());
-                            int kitId = Integer.parseInt(parts[4].trim());  // z+kitId
-                            double x = Double.parseDouble(parts[5].trim());
-                            double y = Double.parseDouble(parts[6].trim());
+            else if ("Difference".equals(conversationId)) {
+                String[] parts = content.split(",");
+                if (parts.length == 7 && parts[0].equals("Difference")) {
 
-                                // Store the result for later selection
-                                compareList.add(new double[]{xa, ya, diff, kitId, x, y});
+                    double xa = Double.parseDouble(parts[1].trim());
+                    double ya = Double.parseDouble(parts[2].trim());
+                    double diff = Double.parseDouble(parts[3].trim());
+                    int kitId = Integer.parseInt(parts[4].trim());
+                    double x = Double.parseDouble(parts[5].trim());
+                    double y = Double.parseDouble(parts[6].trim());
 
+                    String senderAgent = "Z" + kitId;
 
-                            System.out.printf(
-                                "Result received from kit ID %d : Δ = %.2f°C at (%.2f, %.2f)%n",
-                                kitId, diff, x, y
-                            );
-                        } else {
-                            System.out.println("Bad format for 'Difference' received : " + content);
-                        }
+                    // Ignore duplicate responses from the same agent
+                    if (!respondedAgents.contains(senderAgent)) {
+                        respondedAgents.add(senderAgent);
+                        compareList.add(new double[]{xa, ya, diff, kitId, x, y});
+                        System.out.printf(
+                            "Result received from kit ID %d : Δ = %.2f°C at (%.2f, %.2f)%n",
+                            kitId, diff, x, y
+                        );
+                    } else {
+                        System.out.println(getLocalName() + " - Duplicate Difference from " + senderAgent + " ignored.");
                     }
+
+                } else {
+                    System.out.println("Bad format for 'Difference' received : " + content);
+                }
+            }
+
+
 
 
                     // Calculating the distance between the sending agent and the receiving agent
@@ -901,12 +933,12 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
                 return;
             }
 
-            // Blacklist localement
+            // Blacklist localy
             blacklist.add(agentName);
             listAgent.remove(agentName);
             
 
-            // Met Ã  jour la liste et calcule le prochain agent
+            // to update list of agent
             updateAgentList();
             nextagent();
 
