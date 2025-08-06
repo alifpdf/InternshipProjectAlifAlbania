@@ -6,16 +6,4 @@ CREATE TABLE device (
     id_original VARCHAR(100) NOT NULL UNIQUE
 );
 
--- Table 2 : DISPONIBILITE
-DROP TABLE IF EXISTS disponibilite CASCADE;
-CREATE TABLE disponibilite (
-    id SERIAL PRIMARY KEY,
-    ip_adresse INET NOT NULL UNIQUE
-);
 
--- Table 3 : LOCATION
-DROP TABLE IF EXISTS location CASCADE;
-CREATE TABLE location (
-    latitude NUMERIC(16,7) NOT NULL,
-    longitude NUMERIC(16,7) NOT NULL,
-);

@@ -43,6 +43,8 @@ public class AddDB {
      * @param kitId  ID of the kit (used for both checking and insertion)
      */
     public static void addKit(double x, double y, int kitId) {
+        x=round2(x);
+        y=round2(y);
         String checkKitSQL = "SELECT id FROM kit WHERE id = ?";
         String insertKitSQL = "INSERT INTO kit (id, x, y) VALUES (?, ?, ?)";
         String updateKitSQL = "UPDATE kit SET x = ?, y = ? WHERE id = ?";
@@ -96,10 +98,11 @@ public class AddDB {
     public void updateLocalValidPoint() {
         Random rand = new Random();
 
-        double x = SensorAgent.xFromKit;
-        double y = SensorAgent.yFromKit;
-        double xaa = SensorAgent.xaFromKit;
-        double yaa = SensorAgent.yaFromKit;
+
+        double x = round2(SensorAgent.xFromKit);
+        double y = round2(SensorAgent.yFromKit);
+        double xaa = round2(SensorAgent.xaFromKit);
+        double yaa = round2(SensorAgent.yaFromKit);
 
         Set<Double> usedAngles = new HashSet<>();
         boolean updated = false;
@@ -108,7 +111,7 @@ public class AddDB {
         // Essayez jusqu'à 200 directions différentes
         for (int i = 0; i < 200; i++) {
             double theta = 2 * Math.PI * rand.nextDouble();
-            double roundedTheta = Math.round(theta * 100.0) / 100.0;
+            double roundedTheta = round2(theta);
 
             if (!usedAngles.add(roundedTheta)) continue;
 
@@ -117,9 +120,9 @@ public class AddDB {
             double xa = x + radius * Math.cos(roundedTheta);
             double ya = y + radius * Math.sin(roundedTheta);
 
-            // Round final values to 2 decimal places
-            xa = Math.round(xa * 100.0) / 100.0;
-            ya = Math.round(ya * 100.0) / 100.0;
+            // Round final values to 3 decimal places
+            xa = round2(xa);
+            ya = round2(ya);
 
 
             // Met à jour les valeurs statiques
@@ -130,7 +133,7 @@ public class AddDB {
             break;
         }
 
-        
+
 
     }
 
@@ -169,6 +172,10 @@ public class AddDB {
      * @return String in the format "x,y,value" or empty string if no match found
      */
     public String getLastTemperatureWithCoordinates(double xa, double ya) {
+        // Round final values to 3 decimal places
+        xa = round2(xa);
+        ya = round2(ya);
+
         String result = "";
 
 
@@ -194,9 +201,9 @@ public class AddDB {
                     double value = rs.getDouble("value");
 
                     // Round values to 2 decimals
-                    x = Math.round(x * 100.0) / 100.0;
-                    y = Math.round(y * 100.0) / 100.0;
-                    value = Math.round(value * 100.0) / 100.0;
+                    x = round2(x);
+                    y = round2(y) ;
+                    value = round2(value );
 
                     result = x + "," + y + "," + value;
                 }
@@ -220,9 +227,11 @@ public class AddDB {
      * @return A string formatted as "x,y,value" or an empty string if not found
      */
     public String getLastPHWithCoordinates(double xa, double ya) {
+        // Round final values to 3 decimal places
+        xa = round2(xa);
+        ya = round2(ya);
+
         String result = "";
-
-
 
         String sql = """
         SELECT value, x, y
@@ -246,9 +255,9 @@ public class AddDB {
                     double value = rs.getDouble("value");
 
                     // Round values to 2 decimal places
-                    x = Math.round(x * 100.0) / 100.0;
-                    y = Math.round(y * 100.0) / 100.0;
-                    value = Math.round(value * 100.0) / 100.0;
+                    x = round2(x );
+                    y = round2(y) ;
+                    value = round2(value);
 
                     result = x + "," + y + "," + value;
                 }
@@ -275,6 +284,10 @@ public class AddDB {
      * @return Map of device ID to a string "x,y,value" of the latest measurement at the location
      */
     public Map<Integer, String> getLastOtherMeasurementsWithCoordinates(double xa, double ya) {
+
+        // Round final values to 3 decimal places
+        xa = round2(xa);
+        ya = round2(ya);
         Map<Integer, String> resultMap = new HashMap<>();
 
         String sql = """
@@ -294,9 +307,9 @@ public class AddDB {
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
                     int idDevice = rs.getInt("id_device");
-                    double x = Math.round(rs.getDouble("x") * 100.0) / 100.0;
-                    double y = Math.round(rs.getDouble("y") * 100.0) / 100.0;
-                    double value = Math.round(rs.getDouble("value") * 100.0) / 100.0;
+                    double x = round2(rs.getDouble("x"));
+                    double y = round2(rs.getDouble("y"));
+                    double value = round2(rs.getDouble("value"));
 
                     resultMap.put(idDevice, x + "," + y + "," + value);
                 }
@@ -349,9 +362,9 @@ public class AddDB {
                         while (rs.next()) {
                             // Coordinates rounded for grouping
                             String key = String.format("%.2f,%.2f",
-                                    Math.round(rs.getDouble("x") * 100.0) / 100.0,
-                                    Math.round(rs.getDouble("y") * 100.0) / 100.0);
-                            double val = Math.round(rs.getDouble("value") * 100.0) / 100.0;
+                                    round2(rs.getDouble("x")),
+                                    round2(rs.getDouble("y")));
+                            double val = round2(rs.getDouble("value"));
                             values.put(key, val);
                         }
                     }
@@ -390,13 +403,13 @@ public class AddDB {
                     diff += otherWeight * Math.abs(actual - expected);
                 }
 
-                diff = Math.round(diff * 100.0) / 100.0;
+                diff = round2(diff);
 
                 if (diff * diff > maxDiff * maxDiff) { // use squared for consistency
                     String[] xy = key.split(",");
                     bestResult = new double[]{
-                            Double.parseDouble(xy[0]),
-                            Double.parseDouble(xy[1]),
+                            round2(Double.parseDouble(xy[0])),
+                            round2(Double.parseDouble(xy[1])),
                             diff
                     };
                     maxDiff = diff;
@@ -427,6 +440,8 @@ public class AddDB {
      * @return An array [x, y] representing a valid position, or null if none found
      */
     public static double[] generateSingleValidPoint(double xr, double yr, List<double[]> receivedCoordinates) {
+        xr=round2(xr);
+        yr=round2(yr);
         List<double[]> existingKitCenters = new ArrayList<>();
         Random rand = new Random();
         Set<Integer> triedAngles = new HashSet<>();
@@ -448,8 +463,8 @@ public class AddDB {
             double y = yr + 150 * Math.sin(angleRad);
 
             // Round to 2 decimal places
-            x = Math.round(x * 100.0) / 100.0;
-            y = Math.round(y * 100.0) / 100.0;
+            x = round2(x);
+            y = round2(y);
 
             // Step 3: Check that the point is not too close to any existing kit
             boolean isValid = true;
@@ -491,10 +506,10 @@ public class AddDB {
      */
     public void updateLocalCoordinates(int kitID, double newX, double newY) {
 
-        SensorAgent.xFromKit=newX;
-        SensorAgent.yFromKit=newY;
-        SensorAgent.xaFromKit=newX;
-        SensorAgent.yaFromKit=newY;
+        SensorAgent.xFromKit=round2(newX);
+        SensorAgent.yFromKit=round2(newY);
+        SensorAgent.xaFromKit=round2(newX);
+        SensorAgent.yaFromKit=round2(newY);
 
         updateKitCoordinates(kitID, newX, newY); // Also update main Kit table
 
@@ -550,6 +565,8 @@ public class AddDB {
      * @param ya The adjusted Y coordinate.
      */
     public void saveMeasurementToDatabase(double xa, double ya) {
+        xa=round2(xa);
+        ya=round2(ya);
 
         try (Connection conn = getLocalConnection()) {
 
@@ -563,24 +580,24 @@ public class AddDB {
 
             try (PreparedStatement insert = conn.prepareStatement(insertSql)) {
                 // Simulated temperature for device ID = 1
-                double temp = Math.round((15 + Math.random() * 9) * 100.0) / 100.0;
+                double temp = round2(15 + Math.random() * 9);
                 insert.setTimestamp(1, now);
                 insert.setDouble(2, xa);
                 insert.setDouble(3, ya);
                 insert.setInt(4, 1);
                 insert.setDouble(5, temp);
                 insert.executeUpdate();
-                System.out.printf("Temperature inserted: %.2f°C at (%.4f, %.4f)%n", temp, xa, ya);
+                System.out.printf("Temperature inserted: %.2f°C at (%.2f, %.2f)%n", temp, xa, ya);
 
                 // Simulated pH for device ID = 2
-                double ph = Math.round((Math.random() * 14) * 100.0) / 100.0;
+                double ph = round2(Math.random() * 14);
                 insert.setTimestamp(1, now);
                 insert.setDouble(2, xa);
                 insert.setDouble(3, ya);
                 insert.setInt(4, 2);
                 insert.setDouble(5, ph);
                 insert.executeUpdate();
-                System.out.printf("pH inserted: %.2f at (%.4f, %.4f)%n", ph, xa, ya);
+                System.out.printf("pH inserted: %.2f at (%.2f, %.2f)%n", ph, xa, ya);
             }
 
             // Step 2: Insert simulated measurements for other devices (excluding ID 1 and 2)
@@ -593,7 +610,7 @@ public class AddDB {
             ) {
                 while (rsOther.next()) {
                     int deviceId = rsOther.getInt("id");
-                    double randomValue = Math.round((Math.random() * 100) * 100.0) / 100.0;
+                    double randomValue = round2(Math.random() * 100);
 
                     insertOther.setTimestamp(1, now);
                     insertOther.setDouble(2, xa);
@@ -602,7 +619,7 @@ public class AddDB {
                     insertOther.setDouble(5, randomValue);
                     insertOther.executeUpdate();
 
-                    System.out.printf("Random measurement inserted: %.2f (Device ID = %d) at (%.4f, %.4f)%n",
+                    System.out.printf("Random measurement inserted: %.2f (Device ID = %d) at (%.2f, %.2f)%n",
                             randomValue, deviceId, xa, ya);
                 }
             }
@@ -741,6 +758,8 @@ public class AddDB {
      * @param y The Y coordinate of the measurement location
      */
     public void arduino(Map<String, Integer> sensorIdMap, double x, double y) {
+        x=round2(x);
+        y=round2(y);
         SerialPort serialPort = SerialPort.getCommPort("/dev/ttyUSB0");
 
         if (serialPort == null) {
@@ -847,6 +866,8 @@ public class AddDB {
 
 
     private void insertLocalMeasurement(Connection conn, int localDeviceId, double x, double y, double value) throws SQLException {
+        x=round2(x);
+        y=round2(y);
         String sql = """
         INSERT INTO LocalMeasurement (timestamp, x, y, id_device, value)
         VALUES (?, ?, ?, ?, ?)
@@ -1226,18 +1247,18 @@ public class AddDB {
             e.printStackTrace();
         }
     }
-    
-    
-    
+
+
+
     public void resetLocalTables() {
-    try (Connection conn = getLocalConnection(); Statement stmt = conn.createStatement()) {
+        try (Connection conn = getLocalConnection(); Statement stmt = conn.createStatement()) {
 
-        // Drop the tables if they exist
-        stmt.executeUpdate("DROP TABLE IF EXISTS LocalMeasurement");
-        stmt.executeUpdate("DROP TABLE IF EXISTS LocalDevice");
+            // Drop the tables if they exist
+            stmt.executeUpdate("DROP TABLE IF EXISTS LocalMeasurement");
+            stmt.executeUpdate("DROP TABLE IF EXISTS LocalDevice");
 
-        // Recreate LocalDevice
-        stmt.executeUpdate("""
+            // Recreate LocalDevice
+            stmt.executeUpdate("""
             CREATE TABLE LocalDevice (
                 id SERIAL PRIMARY KEY,
                 name_category TEXT NOT NULL,
@@ -1251,8 +1272,8 @@ public class AddDB {
             )
         """);
 
-        // Recreate LocalMeasurement
-        stmt.executeUpdate("""
+            // Recreate LocalMeasurement
+            stmt.executeUpdate("""
             CREATE TABLE LocalMeasurement (
                 id SERIAL PRIMARY KEY,
                 timestamp TIMESTAMPTZ NOT NULL,
@@ -1263,21 +1284,21 @@ public class AddDB {
             )
         """);
 
-        // Reset sequences to match max(id)
-        stmt.execute("SELECT setval('localdevice_id_seq', COALESCE((SELECT MAX(id) FROM LocalDevice), 1), false)");
-        stmt.execute("SELECT setval('localmeasurement_id_seq', COALESCE((SELECT MAX(id) FROM LocalMeasurement), 1), false)");
+            // Reset sequences to match max(id)
+            stmt.execute("SELECT setval('localdevice_id_seq', COALESCE((SELECT MAX(id) FROM LocalDevice), 1), false)");
+            stmt.execute("SELECT setval('localmeasurement_id_seq', COALESCE((SELECT MAX(id) FROM LocalMeasurement), 1), false)");
 
-        System.out.println("LocalDevice and LocalMeasurement tables reset successfully.");
+            System.out.println("LocalDevice and LocalMeasurement tables reset successfully.");
 
-    } catch (Exception e) {
-        System.err.println("Error resetting local tables: " + e.getMessage());
-        e.printStackTrace();
+        } catch (Exception e) {
+            System.err.println("Error resetting local tables: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
-}
 
 
-    
-    
+
+
 
 
     public static void insertSecondContainer() {
@@ -1347,6 +1368,11 @@ public class AddDB {
             System.err.printf(" Failed to insert LocalDevice '%s': %s%n", nameCategory, e.getMessage());
             e.printStackTrace();
         }
+    }
+
+
+    public static double round2(double value) {
+        return Math.round(value * 100.0) / 100.0;
     }
 
 

@@ -22,7 +22,7 @@ import java.util.*;
 
 
 public class SensorAgent extends Agent {
-    
+
     private boolean isTokenProcessing = false;
 
 
@@ -45,11 +45,11 @@ public class SensorAgent extends Agent {
 
     // List storing comparison results with other agents
     List<double[]> compareList = new ArrayList<>();
-    
+
     // Set to store which agents have already sent their Difference
-private Set<String> respondedAgents = new HashSet<>();
-    
-    
+    private Set<String> respondedAgents = new HashSet<>();
+
+
     private long lastTokenSentTime = 0;
 
     // Static coordinates shared among agents
@@ -71,14 +71,14 @@ private Set<String> respondedAgents = new HashSet<>();
 
     @Override
     protected void setup() {
-        
+
         // Initialize database handler
         addDB = new AddDB();
 
 
 
         try {
-            
+
             // Create a new description for this agent
             DFAgentDescription dfd = new DFAgentDescription();
             dfd.setName(getAID());  // Set the agent's AID (unique ID)
@@ -106,26 +106,26 @@ private Set<String> respondedAgents = new HashSet<>();
 // Retrieve arguments passed to the agent (mainContainerFlag, kitId)
         Object[] args = getArguments();
         idKit = (Integer) args[1];
-        xFromKit=(Double)args[2];
-        yFromKit=(Double)args[3];
-        xaFromKit=(Double)args[2];
-        yaFromKit=(Double)args[3];
+        xFromKit=  addDB.round2( (Double)args[2]);
+        yFromKit=addDB.round2((Double)args[3]);
+        xaFromKit=addDB.round2((Double)args[2]);
+        yaFromKit=addDB.round2((Double)args[3]);
 
 
         // Main container logic: truncate DB, setup kit and devices, delay start
         if((boolean)args[0]){
-            
+
 
             addDB.resetLocalTables();
             addDB.addKit(xFromKit, yFromKit, idKit);
-    
+
 
 
             /*localDevice=addDB.getLocalDeviceIdsFromArduino();
             addDB.insertLocalDevicesToMain(idKit);
             addDB.arduino(localDevice,xaFromKit,yaFromKit);*/
-            
-            
+
+
 
 // Delayed behavior to start after setup
             addBehaviour(new WakerBehaviour(this, 30_000) {
@@ -136,7 +136,7 @@ private Set<String> respondedAgents = new HashSet<>();
 
                     addDB.insertLocalDevicesToMain(idKit);
                     addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
-                    
+
                     updateAgentList();
                     nextagent();
                     sendToken();
@@ -148,14 +148,14 @@ private Set<String> respondedAgents = new HashSet<>();
 
 
         }else{
-             addDB.resetLocalTables();
+            addDB.resetLocalTables();
             addDB.TruncateTable();
             // For other containers, only setup kit and update agent list
             addDB.addKit(xFromKit, yFromKit, idKit);
             addDB.insertSecondContainer();
             addDB.insertLocalDevicesToMain(idKit);
             addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
-            
+
             updateAgentList();
             nextagent();
 
@@ -165,60 +165,60 @@ private Set<String> respondedAgents = new HashSet<>();
 
 
 
-addBehaviour(new TickerBehaviour(this, 10_000) { // Check every 10s
-    @Override
-    protected void onTick() {
-        // If more than 2 minutes passed since last token
-        if (System.currentTimeMillis() - lastTokenSentTime > 120_000 && (boolean)args[0]) {
-            System.out.println(getLocalName() + " - No TOKEN sent for 2 minutes. Triggering resend...");
-            sendToken();
-        }
-    }
-});
+        addBehaviour(new TickerBehaviour(this, 10_000) { // Check every 10s
+            @Override
+            protected void onTick() {
+                // If more than 2 minutes passed since last token
+                if (System.currentTimeMillis() - lastTokenSentTime > 120_000 && (boolean)args[0]) {
+                    System.out.println(getLocalName() + " - No TOKEN sent for 2 minutes. Triggering resend...");
+                    sendToken();
+                }
+            }
+        });
 
 
 
 
 // Periodically ping all known agents to check if they are alive
-addBehaviour(new TickerBehaviour(this, 30_000) {
-    protected void onTick() {
-        if ((boolean) args[0]) {
-            try {
-                DFAgentDescription[] result = DFService.search(myAgent, buildSensorSearchTemplate());
-                for (DFAgentDescription desc : result) {
-                    String agentName = desc.getName().getLocalName();
+        addBehaviour(new TickerBehaviour(this, 30_000) {
+            protected void onTick() {
+                if ((boolean) args[0]) {
+                    try {
+                        DFAgentDescription[] result = DFService.search(myAgent, buildSensorSearchTemplate());
+                        for (DFAgentDescription desc : result) {
+                            String agentName = desc.getName().getLocalName();
 
-                    // Exclude blacklisted agents and self
-                    if (!agentName.equals(getLocalName())) {
+                            // Exclude blacklisted agents and self
+                            if (!agentName.equals(getLocalName())) {
 
-                        // Try to ping the agent to check if it's alive
-                        ACLMessage ping = new ACLMessage(ACLMessage.REQUEST);
-                        ping.setConversationId("ping");
+                                // Try to ping the agent to check if it's alive
+                                ACLMessage ping = new ACLMessage(ACLMessage.REQUEST);
+                                ping.setConversationId("ping");
 
-                        ping.addReceiver(new AID(agentName, AID.ISLOCALNAME));
-                        try {
-                            send(ping);  // Send the ping message
-                            System.out.println(getLocalName() + " sent PING to " + agentName);
-                        } catch (Exception e) {
-                            // If the send fails, blacklist the agent immediately
-                            System.err.println(getLocalName() + " - Failed to send ping to " + agentName + ": " + e.getMessage());
-                            blacklistAgentAndNotify(agentName);  // Important: avoid retrying unreachable agents
+                                ping.addReceiver(new AID(agentName, AID.ISLOCALNAME));
+                                try {
+                                    send(ping);  // Send the ping message
+                                    System.out.println(getLocalName() + " sent PING to " + agentName);
+                                } catch (Exception e) {
+                                    // If the send fails, blacklist the agent immediately
+                                    System.err.println(getLocalName() + " - Failed to send ping to " + agentName + ": " + e.getMessage());
+                                    blacklistAgentAndNotify(agentName);  // Important: avoid retrying unreachable agents
+                                }
+                            }
                         }
+                    } catch (Exception e) {
+                        e.printStackTrace();  // Handle DFService or runtime errors
                     }
                 }
-            } catch (Exception e) {
-                e.printStackTrace();  // Handle DFService or runtime errors
             }
-        }
-    }
-});
+        });
 
 
 
 
 
 
-    
+
 
 
 
@@ -259,9 +259,9 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
 
 
                 if (msg == null) {
-                        block();
-                        return;
-                    }
+                    block();
+                    return;
+                }
 
 
 
@@ -271,53 +271,53 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
 
                 try {
                     //if the message is ping
-                    
+
                     if (content != null && content.contains("MTS-error") && content.contains("Agent not found")) {
-    String failedAgent = extractAgentFromMtsError(content);  // implement this helper
-    System.err.println(getLocalName() + " - Detected unreachable agent: " + failedAgent + " â†’ blacklisting.");
-    blacklistAgentAndNotify(failedAgent);
-}
+                        String failedAgent = extractAgentFromMtsError(content);  // implement this helper
+                        System.err.println(getLocalName() + " - Detected unreachable agent: " + failedAgent + " â†’ blacklisting.");
+                        blacklistAgentAndNotify(failedAgent);
+                    }
 
 
 
 
                     if ("ping".equals(conversationId)) {
-    String sender = msg.getSender().getLocalName();
-    //Ignore messages from AMS
-    if ("ams".equalsIgnoreCase(sender)) {
-        System.out.println(getLocalName() + " - Ignoring ping from AMS.");
-        return;
-    }
-
- 
-
-    // Add to known agents if it's the first time we see them
-    boolean isNewAgent = knownAgents.add(sender);
-    if (isNewAgent) {
-        System.out.println(getLocalName() + " discovered new agent via ping: " + sender);
-                }
-    
-
-    System.out.println(getLocalName() + " confirms " + sender + " is alive.");
+                        String sender = msg.getSender().getLocalName();
+                        //Ignore messages from AMS
+                        if ("ams".equalsIgnoreCase(sender)) {
+                            System.out.println(getLocalName() + " - Ignoring ping from AMS.");
+                            return;
+                        }
 
 
-    // Refresh agent list and next agent logic
-    updateAgentList();
-    nextagent();
 
-    // Reply with PONG
-    ACLMessage reply = msg.createReply();
-    reply.setPerformative(ACLMessage.INFORM);
-    reply.setConversationId("pong");
-    send(reply);
-    System.out.println(getLocalName() + " sent PONG to " + sender);
-}
+                        // Add to known agents if it's the first time we see them
+                        boolean isNewAgent = knownAgents.add(sender);
+                        if (isNewAgent) {
+                            System.out.println(getLocalName() + " discovered new agent via ping: " + sender);
+                        }
 
-                    
+
+                        System.out.println(getLocalName() + " confirms " + sender + " is alive.");
+
+
+                        // Refresh agent list and next agent logic
+                        updateAgentList();
+                        nextagent();
+
+                        // Reply with PONG
+                        ACLMessage reply = msg.createReply();
+                        reply.setPerformative(ACLMessage.INFORM);
+                        reply.setConversationId("pong");
+                        send(reply);
+                        System.out.println(getLocalName() + " sent PONG to " + sender);
+                    }
+
+
                     else if ("pong".equals(conversationId)) {
                         String sender = msg.getSender().getLocalName();
 
-                        
+
                         // Check if agent was previously blacklisted
                         boolean wasBlacklisted = blacklist.remove(sender);
 
@@ -346,8 +346,8 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                         }
 
                         System.out.println(getLocalName() + " received PONG from " + sender);
-                        
-                        
+
+
                         updateAgentList();
                         nextagent();
                         /*
@@ -359,63 +359,63 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                                 }
                             });
                         }
-                           */                 
-                        
-                        
+                           */
+
+
                     }
-                    
+
 
 
                     //to blacklist the unworked agent
 
-                                    else if ("blacklist".equals(conversationId)) {
-                    String agentToBlacklist = content.trim();
-                    String senderAgent = msg.getSender().getLocalName();  
-                    System.out.println(getLocalName() + " received BLACKLIST notification from " + senderAgent); 
+                    else if ("blacklist".equals(conversationId)) {
+                        String agentToBlacklist = content.trim();
+                        String senderAgent = msg.getSender().getLocalName();
+                        System.out.println(getLocalName() + " received BLACKLIST notification from " + senderAgent);
 
-                    if (!blacklist.contains(agentToBlacklist)) {
-                        blacklist.add(agentToBlacklist);
-                        updateAgentList();
-                        nextagent();
+                        if (!blacklist.contains(agentToBlacklist)) {
+                            blacklist.add(agentToBlacklist);
+                            updateAgentList();
+                            nextagent();
 
-                        System.out.println(getLocalName() + " added " + agentToBlacklist + " to its blacklist (via message).");
-                    } else {
-                        System.out.println(getLocalName() + " already had " + agentToBlacklist + " in its blacklist.");
-                    }
-                }
-                
-                else if ("whitelist".equals(conversationId)) {
-                    String agentToUnblock = content.trim();
-                    String senderAgent = msg.getSender().getLocalName();
-
-                    System.out.println(getLocalName() + " received WHITELIST notification from " + senderAgent + " for " + agentToUnblock);
-
-                    if (blacklist.contains(agentToUnblock)) {
-                        blacklist.remove(agentToUnblock);
-                        updateAgentList();   // Refresh after change
-                        nextagent();
-                        System.out.println(getLocalName() + " removed " + agentToUnblock + " from blacklist (via WHITELIST).");
-                    } else {
-                        System.out.println(getLocalName() + " already had " + agentToUnblock + " unblocked.");
+                            System.out.println(getLocalName() + " added " + agentToBlacklist + " to its blacklist (via message).");
+                        } else {
+                            System.out.println(getLocalName() + " already had " + agentToBlacklist + " in its blacklist.");
+                        }
                     }
 
-                }
+                    else if ("whitelist".equals(conversationId)) {
+                        String agentToUnblock = content.trim();
+                        String senderAgent = msg.getSender().getLocalName();
 
-                
-                
+                        System.out.println(getLocalName() + " received WHITELIST notification from " + senderAgent + " for " + agentToUnblock);
+
+                        if (blacklist.contains(agentToUnblock)) {
+                            blacklist.remove(agentToUnblock);
+                            updateAgentList();   // Refresh after change
+                            nextagent();
+                            System.out.println(getLocalName() + " removed " + agentToUnblock + " from blacklist (via WHITELIST).");
+                        } else {
+                            System.out.println(getLocalName() + " already had " + agentToUnblock + " unblocked.");
+                        }
+
+                    }
+
+
+
 
 
 
                     // --- TOKEN Reception Block ---
                     else if ("TOKEN".equals(conversationId)) {
                         if (isTokenProcessing) {
-        System.out.println(getLocalName() + " - Already processing a TOKEN, ignoring.");
-        return;
-    }
-    isTokenProcessing = true;
+                            System.out.println(getLocalName() + " - Already processing a TOKEN, ignoring.");
+                            return;
+                        }
+                        isTokenProcessing = true;
                         // Clear previous comparison results
-                        compareList.clear(); 
-                         respondedAgents.clear();
+                        compareList.clear();
+                        respondedAgents.clear();
 
                         System.out.println(getLocalName() + " received TOKEN, scheduling start in 20 sec...");
 
@@ -497,95 +497,95 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                                 });
 
 
-                    // Step 3: After collecting responses, compute max difference and send move command
-                    sequential.addSubBehaviour(new Behaviour() {
+                                // Step 3: After collecting responses, compute max difference and send move command
+                                sequential.addSubBehaviour(new Behaviour() {
 
-                        private long startTime = System.currentTimeMillis();
-                        private final long TIMEOUT_MS = 20_000; // 20 seconds
+                                    private long startTime = System.currentTimeMillis();
+                                    private final long TIMEOUT_MS = 20_000; // 20 seconds
 
-                        @Override
-                        public void action() {
-                            boolean allResponses = respondedAgents.size() >= listAgent.size();
+                                    @Override
+                                    public void action() {
+                                        boolean allResponses = respondedAgents.size() >= listAgent.size();
 
-                            boolean timeoutReached = (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
+                                        boolean timeoutReached = (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
 
-                            if (allResponses || timeoutReached) {
-                                if (allResponses) {
-                                    System.out.println(getLocalName() + " - All responses received (" 
-                                                       + compareList.size() + "/" + listAgent.size() + ")");
-                                } else {
-                                    System.out.println(getLocalName() + " - Timeout reached after " 
-                                                       + (TIMEOUT_MS / 1000) + "s (" 
-                                                       + compareList.size() + "/" + listAgent.size() + " responses)");
-                                }
+                                        if (allResponses || timeoutReached) {
+                                            if (allResponses) {
+                                                System.out.println(getLocalName() + " - All responses received ("
+                                                        + compareList.size() + "/" + listAgent.size() + ")");
+                                            } else {
+                                                System.out.println(getLocalName() + " - Timeout reached after "
+                                                        + (TIMEOUT_MS / 1000) + "s ("
+                                                        + compareList.size() + "/" + listAgent.size() + " responses)");
+                                            }
 
-                                // Find the entry with the maximum absolute difference
-                                double[] maxDiffEntry = null;
-                                double maxDiff = 0;
-                                for (double[] entry : compareList) {
-                                    double diff = entry[2];
-                                    if (Math.abs(diff) >= Math.abs(maxDiff)) {
-                                        maxDiff = diff;
-                                        maxDiffEntry = entry;
-                                    }
-                                }
+                                            // Find the entry with the maximum absolute difference
+                                            double[] maxDiffEntry = null;
+                                            double maxDiff = 0;
+                                            for (double[] entry : compareList) {
+                                                double diff = entry[2];
+                                                if (Math.abs(diff) >= Math.abs(maxDiff)) {
+                                                    maxDiff = diff;
+                                                    maxDiffEntry = entry;
+                                                }
+                                            }
 
-                                // Build a set of unique coordinates in the format "x:y"
-                                Set<String> coordinatesSet = new LinkedHashSet<>();
-                                for (double[] entry : compareList) {
-                                    coordinatesSet.add(entry[4] + ":" + entry[5]);
-                                }
-                                String coordBuilder = String.join("|", coordinatesSet);
+                                            // Build a set of unique coordinates in the format "x:y"
+                                            Set<String> coordinatesSet = new LinkedHashSet<>();
+                                            for (double[] entry : compareList) {
+                                                coordinatesSet.add(addDB.round2(entry[4]) + ":" + addDB.round2(entry[5]));
+                                            }
+                                            String coordBuilder = String.join("|", coordinatesSet);
 
-                                if (maxDiffEntry != null) {
-                                    double targetX = maxDiffEntry[0];
-                                    double targetY = maxDiffEntry[1];
-                                    int kitId = (int) maxDiffEntry[3];
-                                    String targetAgent = "Z" + kitId;
+                                            if (maxDiffEntry != null) {
+                                                double targetX = addDB.round2(maxDiffEntry[0]);
+                                                double targetY = addDB.round2(maxDiffEntry[1]);
+                                                int kitId = (int) maxDiffEntry[3];
+                                                String targetAgent = "Z" + kitId;
 
-                                    // Prepare MOVE message content
-                                    String content = String.format(Locale.US, "%f,%f,%s", 
-                                                                   targetX, targetY, coordBuilder);
+                                                // Prepare MOVE message content
+                                                String content = String.format(Locale.US, "%2f,%2f,%s",
+                                                        targetX, targetY, coordBuilder);
 
-                                    // Send the MOVE request to the target agent
-                                    ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
-                                    msg.setConversationId("Moving data");
-                                    msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
-                                    msg.setContent(content);
-                                    send(msg);
-                                    System.out.println("Sending MOVE to " + targetAgent + " with path: " + content);
+                                                // Send the MOVE request to the target agent
+                                                ACLMessage msg = new ACLMessage(ACLMessage.REQUEST);
+                                                msg.setConversationId("Moving data");
+                                                msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
+                                                msg.setContent(content);
+                                                send(msg);
+                                                System.out.println("Sending MOVE to " + targetAgent + " with path: " + content);
 
-                                    // After 20 seconds, update local coordinates and send the token
-                                    myAgent.addBehaviour(new WakerBehaviour(myAgent, 20_000) {
-                                        protected void onWake() {
-                                            addDB.updateLocalCoordinates(idKit, targetX, targetY);
-                                            System.out.printf("Kit updated to (%.4f, %.4f)%n", targetX, targetY);
-                                            updateAgentList();
-                                            nextagent();
-                                            sendToken();
-                                            isTokenProcessing = false;
+                                                // After 20 seconds, update local coordinates and send the token
+                                                myAgent.addBehaviour(new WakerBehaviour(myAgent, 20_000) {
+                                                    protected void onWake() {
+                                                        addDB.updateLocalCoordinates(idKit, targetX, targetY);
+                                                        System.out.printf("Kit updated to (%.2f, %.2f)%n", targetX, targetY);
+                                                        updateAgentList();
+                                                        nextagent();
+                                                        sendToken();
+                                                        isTokenProcessing = false;
+                                                    }
+                                                });
+                                            } else {
+                                                System.out.println("No difference found. No move needed.");
+                                                updateAgentList();
+                                                nextagent();
+                                                sendToken();
+                                                isTokenProcessing = false;
+                                            }
+
+                                            stop(); // End this Behaviour
                                         }
-                                    });
-                                } else {
-                                    System.out.println("No difference found. No move needed.");
-                                    updateAgentList();
-                                    nextagent();
-                                    sendToken();
-                                    isTokenProcessing = false;
-                                }
+                                    }
 
-                                stop(); // End this Behaviour
-                            }
-                        }
+                                    @Override
+                                    public boolean done() {
+                                        // Finish when all responses are received OR when the timeout is reached
+                                        return respondedAgents.size() >= listAgent.size()
+                                                || (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
 
-                        @Override
-                        public boolean done() {
-                            // Finish when all responses are received OR when the timeout is reached
-                            return respondedAgents.size() >= listAgent.size() 
-                                || (System.currentTimeMillis() - startTime) >= TIMEOUT_MS;
-
-                        }
-                    });
+                                    }
+                                });
 
 
 
@@ -638,15 +638,15 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                                 reply.setPerformative(ACLMessage.INFORM);
                                 reply.setConversationId("Difference");
 
-                                 // Format: Difference,xa,ya,diff,idKit,xFromKit,yFromKit
-                                reply.setContent(String.format(Locale.US, "Difference,%.3f,%.3f,%.2f,%d,%.3f,%.3f",
-        localResult[0], localResult[1], localResult[2], idKit, xFromKit, yFromKit));
+                                // Format: Difference,xa,ya,diff,idKit,xFromKit,yFromKit
+                                reply.setContent(String.format(Locale.US, "Difference,%.2f,%.2f,%.2f,%d,%.1f,%.2f",
+                                        localResult[0], localResult[1], localResult[2], idKit, xFromKit, yFromKit));
                                 send(reply);
 
                                 System.out.printf(
-                                        "Data received from %s with Δ max at (%.3f, %.3f), Δ = %.2f%n",
+                                        "Data received from %s with Δ max at (%.2f, %.2f), Δ = %.2f%n",
                                         senderAgent, localResult[0], localResult[1], localResult[2]
-                                    );
+                                );
 
                             } else {
                                 System.out.println("No matching local position found for comparison.");
@@ -660,35 +660,35 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
 
 
 
-            else if ("Difference".equals(conversationId)) {
-                String[] parts = content.split(",");
-                if (parts.length == 7 && parts[0].equals("Difference")) {
+                    else if ("Difference".equals(conversationId)) {
+                        String[] parts = content.split(",");
+                        if (parts.length == 7 && parts[0].equals("Difference")) {
 
-                    double xa = Double.parseDouble(parts[1].trim());
-                    double ya = Double.parseDouble(parts[2].trim());
-                    double diff = Double.parseDouble(parts[3].trim());
-                    int kitId = Integer.parseInt(parts[4].trim());
-                    double x = Double.parseDouble(parts[5].trim());
-                    double y = Double.parseDouble(parts[6].trim());
+                            double xa = addDB.round2(Double.parseDouble(parts[1].trim()));
+                            double ya = addDB.round2(Double.parseDouble(parts[2].trim()));
+                            double diff = Double.parseDouble(parts[3].trim());
+                            int kitId = Integer.parseInt(parts[4].trim());
+                            double x = addDB.round2(Double.parseDouble(parts[5].trim()));
+                            double y = addDB.round2(Double.parseDouble(parts[6].trim()));
 
-                    String senderAgent = "Z" + kitId;
+                            String senderAgent = "Z" + kitId;
 
-                    // Ignore duplicate responses from the same agent
-                    if (!respondedAgents.contains(senderAgent)) {
-                        respondedAgents.add(senderAgent);
-                        compareList.add(new double[]{xa, ya, diff, kitId, x, y});
-                        System.out.printf(
-                            "Result received from kit ID %d : Δ = %.2f°C at (%.2f, %.2f)%n",
-                            kitId, diff, x, y
-                        );
-                    } else {
-                        System.out.println(getLocalName() + " - Duplicate Difference from " + senderAgent + " ignored.");
+                            // Ignore duplicate responses from the same agent
+                            if (!respondedAgents.contains(senderAgent)) {
+                                respondedAgents.add(senderAgent);
+                                compareList.add(new double[]{xa, ya, diff, kitId, x, y});
+                                System.out.printf(
+                                        "Result received from kit ID %d : Δ = %.2f°C at (%.2f, %.2f)%n",
+                                        kitId, diff, x, y
+                                );
+                            } else {
+                                System.out.println(getLocalName() + " - Duplicate Difference from " + senderAgent + " ignored.");
+                            }
+
+                        } else {
+                            System.out.println("Bad format for 'Difference' received : " + content);
+                        }
                     }
-
-                } else {
-                    System.out.println("Bad format for 'Difference' received : " + content);
-                }
-            }
 
 
 
@@ -697,16 +697,16 @@ addBehaviour(new TickerBehaviour(this, 30_000) {
                     else if ("Moving data".equals(conversationId) && performative == ACLMessage.REQUEST) {
 
 
-                          String senderAgent = msg.getSender().getLocalName();
-System.out.println(getLocalName() + " received MOVE request from " + senderAgent + " with content: " + content);
+                        String senderAgent = msg.getSender().getLocalName();
+                        System.out.println(getLocalName() + " received MOVE request from " + senderAgent + " with content: " + content);
 
                         // Expecting format: targetX, targetY, x1:y1|x2:y2|...
                         String[] parts = content.split(",", 3);  // Only 3 expected parts
 
                         if (parts.length == 3) {
                             try {
-                                double targetX = Double.parseDouble(parts[0].trim());
-                                double targetY = Double.parseDouble(parts[1].trim());
+                                double targetX = addDB.round2(Double.parseDouble(parts[0].trim()));
+                                double targetY = addDB.round2(Double.parseDouble(parts[1].trim()));
                                 String coordsStr = parts[2].trim();
 
                                 List<double[]> receivedCoordinates = new ArrayList<>();
@@ -716,8 +716,8 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
                                     String[] xy = pair.split(":");
                                     if (xy.length == 2) {
                                         try {
-                                            double x = Double.parseDouble(xy[0].trim());
-                                            double y = Double.parseDouble(xy[1].trim());
+                                            double x = addDB.round2(Double.parseDouble(xy[0].trim()));
+                                            double y = addDB.round2(Double.parseDouble(xy[1].trim()));
                                             receivedCoordinates.add(new double[]{x, y});
                                         } catch (NumberFormatException e) {
                                             System.err.println(getLocalName() + " - Invalid coordinate in path: " + pair);
@@ -729,9 +729,9 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
                                 double[] newPoint = AddDB.generateSingleValidPoint(targetX, targetY, receivedCoordinates);
 
                                 // Update this agent's coordinates in the database
-                                addDB.updateLocalCoordinates(idKit, newPoint[0], newPoint[1]);
+                                addDB.updateLocalCoordinates(idKit, addDB.round2(newPoint[0]), addDB.round2(newPoint[1]));
 
-                                System.out.printf("Kit %d moved to (%.4f, %.4f)%n", idKit, newPoint[0], newPoint[1]);
+                                System.out.printf("Kit %d moved to (%.2f, %.2f)%n", idKit, newPoint[0], newPoint[1]);
 
                             } catch (NumberFormatException e) {
                                 System.err.println(getLocalName() + " - Invalid numeric value in Moving data: " + content);
@@ -744,19 +744,19 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
                         ACLMessage reply = msg.createReply();
                         reply.setPerformative(ACLMessage.INFORM);
                         reply.setConversationId("Moving data");
-                        
+
                         reply.setContent("Moving done");
                         send(reply);
                     }
                     else if ("Moving data".equals(conversationId) && performative == ACLMessage.INFORM) {
-            String senderAgent = msg.getSender().getLocalName();
-            if ("Moving done".equalsIgnoreCase(content.trim())) {
-                System.out.println(getLocalName() + " received confirmation from " + senderAgent + ": Moving done.");
-            } else {
-                System.out.println(getLocalName() + " received unknown INFORM in Moving data from " + senderAgent + ": " + content);
-            }
+                        String senderAgent = msg.getSender().getLocalName();
+                        if ("Moving done".equalsIgnoreCase(content.trim())) {
+                            System.out.println(getLocalName() + " received confirmation from " + senderAgent + ": Moving done.");
+                        } else {
+                            System.out.println(getLocalName() + " received unknown INFORM in Moving data from " + senderAgent + ": " + content);
+                        }
 
-}
+                    }
 
                     else {
                         System.out.println(getLocalName() + " - received null content.");
@@ -799,40 +799,40 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
      * Used for coordinating actions in a token-passing system among agents.
      */
     private void sendToken() {
-    // Update the next agent dynamically before sending the token
-    updateAgentList();
-    nextagent();
+        // Update the next agent dynamically before sending the token
+        updateAgentList();
+        nextagent();
 
-    // Check if the nextAgent is valid
-    if (nextAgent == null || nextAgent.trim().isEmpty()) {
-        
-        System.err.println(getLocalName() + " - No available agent, TOKEN not sent.");
-        return;
+        // Check if the nextAgent is valid
+        if (nextAgent == null || nextAgent.trim().isEmpty()) {
+
+            System.err.println(getLocalName() + " - No available agent, TOKEN not sent.");
+            return;
+        }
+        if (blacklist.contains(nextAgent)) {
+            System.err.println(getLocalName() + " - Next agent " + nextAgent + " is blacklisted. Skipping token send.");
+            return;
+        }
+
+        // Create an INFORM message with content "TOKEN"
+        ACLMessage token = new ACLMessage(ACLMessage.INFORM);
+        token.setConversationId("TOKEN");
+
+        // Set the receiver of the message to the next agent
+        token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
+
+        // Send the message to the next agent
+        try {
+            lastTokenSentTime = System.currentTimeMillis();
+            send(token);
+            // Log the action to the console
+            System.out.println(getLocalName() + " gives token to " + nextAgent);
+        } catch (Exception e) {
+            System.err.println(getLocalName() + " - Error sending TOKEN to " + nextAgent + ": " + e.getMessage());
+            // Blacklist the agent if sending the token fails
+            blacklistAgentAndNotify(nextAgent);
+        }
     }
-    if (blacklist.contains(nextAgent)) {
-    System.err.println(getLocalName() + " - Next agent " + nextAgent + " is blacklisted. Skipping token send.");
-    return;
-}
-
-    // Create an INFORM message with content "TOKEN"
-    ACLMessage token = new ACLMessage(ACLMessage.INFORM);
-    token.setConversationId("TOKEN");
-
-    // Set the receiver of the message to the next agent
-    token.addReceiver(new AID(nextAgent, AID.ISLOCALNAME));
-
-    // Send the message to the next agent
-    try {
-        lastTokenSentTime = System.currentTimeMillis();
-        send(token);
-        // Log the action to the console
-        System.out.println(getLocalName() + " gives token to " + nextAgent);
-    } catch (Exception e) {
-        System.err.println(getLocalName() + " - Error sending TOKEN to " + nextAgent + ": " + e.getMessage());
-        // Blacklist the agent if sending the token fails
-        blacklistAgentAndNotify(nextAgent);
-    }
-}
 
 
 
@@ -858,13 +858,13 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
                 String name = agentDesc.getName().getLocalName();
 
                 // Add agent to list if it's not self and not in blacklist
-                 boolean isBlacklisted = blacklist.contains(name);
-           
+                boolean isBlacklisted = blacklist.contains(name);
 
-            if (!name.equals(getLocalName()) && !isBlacklisted && !"ams".equals(name)) {
-                 System.out.println(getLocalName() + " sees DF agent: " + name + " (blacklisted=" + isBlacklisted + ")");
-                listAgent.add(name);
-            }
+
+                if (!name.equals(getLocalName()) && !isBlacklisted && !"ams".equals(name)) {
+                    System.out.println(getLocalName() + " sees DF agent: " + name + " (blacklisted=" + isBlacklisted + ")");
+                    listAgent.add(name);
+                }
             }
 
             // Display the updated list of agents
@@ -921,69 +921,69 @@ System.out.println(getLocalName() + " received MOVE request from " + senderAgent
             e.printStackTrace();
         }
     }
-    
-                /**
-         * Adds an agent to the local blacklist and notifies all other agents about it.
-         * 
-         * @param agentName The local name of the agent to blacklist.
-         */
-        private void blacklistAgentAndNotify(String agentName) {
-            // If the agent is already blacklisted, do nothing
-            if (blacklist.contains(agentName)) {
-                System.out.println(getLocalName() + " - Agent " + agentName + " is already blacklisted.");
-                return;
+
+    /**
+     * Adds an agent to the local blacklist and notifies all other agents about it.
+     *
+     * @param agentName The local name of the agent to blacklist.
+     */
+    private void blacklistAgentAndNotify(String agentName) {
+        // If the agent is already blacklisted, do nothing
+        if (blacklist.contains(agentName)) {
+            System.out.println(getLocalName() + " - Agent " + agentName + " is already blacklisted.");
+            return;
+        }
+
+        // Add the agent to the local blacklist
+        blacklist.add(agentName);
+
+        // Remove the agent from the current active agents list
+        listAgent.remove(agentName);
+
+        // Update the list of agents from the DF and determine the next agent
+        updateAgentList();
+        nextagent();
+
+        System.err.println(getLocalName() + " - Agent " + agentName + " has been blacklisted.");
+
+        // Create a notification message for other agents about the blacklist update
+        ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
+        notif.setConversationId("blacklist"); // Identifies the purpose of the message
+        notif.setContent(agentName); // The name of the blacklisted agent
+
+        // Send the notification to all active agents except this one
+        for (String peer : listAgent) {
+            if (!getLocalName().equals(peer)) {
+                notif.addReceiver(new AID(peer, AID.ISLOCALNAME));
             }
+        }
 
-            // Add the agent to the local blacklist
-            blacklist.add(agentName);
-
-            // Remove the agent from the current active agents list
-            listAgent.remove(agentName);
-
-            // Update the list of agents from the DF and determine the next agent
-            updateAgentList();
-            nextagent();
-
-            System.err.println(getLocalName() + " - Agent " + agentName + " has been blacklisted.");
-
-            // Create a notification message for other agents about the blacklist update
-            ACLMessage notif = new ACLMessage(ACLMessage.INFORM);
-            notif.setConversationId("blacklist"); // Identifies the purpose of the message
-            notif.setContent(agentName); // The name of the blacklisted agent
-
-            // Send the notification to all active agents except this one
-            for (String peer : listAgent) {
-                if (!getLocalName().equals(peer)) {
-                    notif.addReceiver(new AID(peer, AID.ISLOCALNAME));
-                }
-            }
-
-            // Broadcast the blacklist message
-            send(notif);
-            System.out.println(getLocalName() + " broadcasted BLACKLIST for " + agentName);
-}
-
-
-
-        private String extractAgentFromMtsError(String msg) {
-    try {
-        // Focus on the part inside (MTS-error ( agent-identifier :name XYZ ...
-        int errorBlockStart = msg.indexOf("(MTS-error");
-        if (errorBlockStart == -1) return "unknown";
-
-        // Look for :name after MTS-error block start
-        int nameStart = msg.indexOf(":name ", errorBlockStart);
-        if (nameStart == -1) return "unknown";
-
-        nameStart += ":name ".length();
-        int nameEnd = msg.indexOf("@", nameStart);
-        if (nameEnd == -1) return "unknown";
-
-        return msg.substring(nameStart, nameEnd);  // Extract only the local name (before @)
-    } catch (Exception e) {
-        return "unknown";
+        // Broadcast the blacklist message
+        send(notif);
+        System.out.println(getLocalName() + " broadcasted BLACKLIST for " + agentName);
     }
-}
+
+
+
+    private String extractAgentFromMtsError(String msg) {
+        try {
+            // Focus on the part inside (MTS-error ( agent-identifier :name XYZ ...
+            int errorBlockStart = msg.indexOf("(MTS-error");
+            if (errorBlockStart == -1) return "unknown";
+
+            // Look for :name after MTS-error block start
+            int nameStart = msg.indexOf(":name ", errorBlockStart);
+            if (nameStart == -1) return "unknown";
+
+            nameStart += ":name ".length();
+            int nameEnd = msg.indexOf("@", nameStart);
+            if (nameEnd == -1) return "unknown";
+
+            return msg.substring(nameStart, nameEnd);  // Extract only the local name (before @)
+        } catch (Exception e) {
+            return "unknown";
+        }
+    }
 
 
 
