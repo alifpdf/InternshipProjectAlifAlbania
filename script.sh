@@ -32,8 +32,9 @@ while true; do
     local_ip=$(ifconfig | grep -w inet | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1)
     last_octet=$(echo "$local_ip" | cut -d '.' -f 4)
 
-    # Search for an active machine with port 60000 open
-    remote_ip=$(sudo nmap -p 60000 --open -oG - 192.168.224.0/24 | awk '/Up$/{print $2}' | head -n 1)
+    # Search for an active machine with port 60000 open on wlan0, in IP range 100-150
+    remote_ip=$(sudo nmap -e wlan0 -p 60000 --open 192.168.0.100-150 -oG - | awk '/60000\/open/ {print $2}' | head -n 1)
+
 
     echo "Launching Java program with:"
     echo " - lastOctet: $last_octet"

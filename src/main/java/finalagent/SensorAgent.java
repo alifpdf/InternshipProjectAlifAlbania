@@ -112,31 +112,30 @@ public class SensorAgent extends Agent {
         yaFromKit=addDB.round2((Double)args[3]);
 
 
-        // Main container logic: truncate DB, setup kit and devices, delay start
+// Main container logic: truncate DB, setup kit and devices, delay start
         if((boolean)args[0]){
-
+            
 
             addDB.resetLocalTables();
             addDB.addKit(xFromKit, yFromKit, idKit);
-
-
-
-            /*localDevice=addDB.getLocalDeviceIdsFromArduino();
+             localDevice=addDB.getLocalDeviceIdsFromArduino();
             addDB.insertLocalDevicesToMain(idKit);
-            addDB.arduino(localDevice,xaFromKit,yaFromKit);*/
-
-
+            addDB.arduino(localDevice,xaFromKit,yaFromKit);
+    
 
 // Delayed behavior to start after setup
             addBehaviour(new WakerBehaviour(this, 30_000) {
                 @Override
                 protected void onWake() {
                     System.out.println(getLocalName() + " starts after 30s delay");
-                    addDB.insertSecondContainer();
-
+                    
+                    /*addDB.insertSecondContainer();
                     addDB.insertLocalDevicesToMain(idKit);
-                    addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
-
+                    addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);*/
+                    
+           
+            
+                    
                     updateAgentList();
                     nextagent();
                     sendToken();
@@ -148,14 +147,14 @@ public class SensorAgent extends Agent {
 
 
         }else{
-            addDB.resetLocalTables();
+             addDB.resetLocalTables();
             addDB.TruncateTable();
             // For other containers, only setup kit and update agent list
             addDB.addKit(xFromKit, yFromKit, idKit);
             addDB.insertSecondContainer();
             addDB.insertLocalDevicesToMain(idKit);
             addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
-
+            
             updateAgentList();
             nextagent();
 
@@ -232,9 +231,9 @@ public class SensorAgent extends Agent {
 
 
                 System.out.println(getLocalName() + " is saving local measure...");
-                addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
+               // addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
 
-                //addDB.arduino(localDevice,xaFromKit,yaFromKit);
+                addDB.arduino(localDevice,xaFromKit,yaFromKit);
             }
         });
 
@@ -350,16 +349,7 @@ public class SensorAgent extends Agent {
 
                         updateAgentList();
                         nextagent();
-                        /*
-                        if (blacklist.isEmpty() && listAgent.size() < 2 && wasBlacklisted) {
-                            System.out.println(getLocalName() + " - All agents responsive but alone. Sending token in 5 seconds...");
-                            addBehaviour(new WakerBehaviour(myAgent, 5000) {
-                                protected void onWake() {
-                                    sendToken();
-                                }
-                            });
-                        }
-                           */
+                      
 
 
                     }
@@ -406,17 +396,14 @@ public class SensorAgent extends Agent {
 
 
 
-                    // --- TOKEN Reception Block ---
+                    // -- TOKEN Reception Block --
                     else if ("TOKEN".equals(conversationId)) {
                         if (isTokenProcessing) {
                             System.out.println(getLocalName() + " - Already processing a TOKEN, ignoring.");
                             return;
                         }
                         isTokenProcessing = true;
-                        // Clear previous comparison results
-                        compareList.clear();
-                        respondedAgents.clear();
-
+                       
                         System.out.println(getLocalName() + " received TOKEN, scheduling start in 20 sec...");
 
 
@@ -424,6 +411,13 @@ public class SensorAgent extends Agent {
                         addBehaviour(new WakerBehaviour(myAgent, 20_000) {
                             protected void onWake() {
                                 System.out.println(getLocalName() + " starts execution after 20 sec delay");
+                                 // Clear previous comparison results
+                        addDB.TruncateLocalMeasurementOnly();
+                        compareList.clear();
+                        respondedAgents.clear();
+
+                                addDB.arduino(localDevice,xaFromKit,yaFromKit);
+                                //addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
 
                                 SequentialBehaviour sequential = new SequentialBehaviour();
                                 // Step 1: Update agent list and determine next agent
@@ -553,12 +547,21 @@ public class SensorAgent extends Agent {
                                                 msg.addReceiver(new AID(targetAgent, AID.ISLOCALNAME));
                                                 msg.setContent(content);
                                                 send(msg);
-                                                System.out.println("Sending MOVE to " + targetAgent + " with path: " + content);
-
+                                                
+                                                System.out.println(String.format(
+                                                        "%s intends to move to x=%.2f, y=%.2f - a point within the area of %s. " +
+                                                        "It requests %s to select a location far from previously visited positions: [%s], including its own usual zone.",
+                                                        getLocalName(), targetX, targetY, targetAgent, targetAgent, coordBuilder
+                                                    ));
+                                                
                                                 // After 20 seconds, update local coordinates and send the token
                                                 myAgent.addBehaviour(new WakerBehaviour(myAgent, 20_000) {
                                                     protected void onWake() {
-                                                        addDB.updateLocalCoordinates(idKit, targetX, targetY);
+                                                        xFromKit=targetX;
+                                                        yFromKit=targetY;
+                                                        xaFromKit=targetX;
+                                                        yaFromKit=targetY;
+                                                        addDB.updateKitCoordinates(idKit,xFromKit,yFromKit);
                                                         System.out.printf("Kit updated to (%.2f, %.2f)%n", targetX, targetY);
                                                         updateAgentList();
                                                         nextagent();
@@ -607,6 +610,8 @@ public class SensorAgent extends Agent {
                             System.out.println("Invalid format: " + content);
                             return; // Message doesn't have the expected minimum fields
                         }
+                        addDB.arduino(localDevice,xaFromKit,yaFromKit);
+                        //addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
 
                         try {
                             // Parse temperature, pH, and the sender agent's name

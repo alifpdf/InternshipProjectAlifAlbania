@@ -26,7 +26,7 @@ public class AddDB {
 
     // Get connection to the MAIN (remote) database
     public static Connection getMainConnection() throws SQLException {
-        String mainURL = "jdbc:postgresql://192.168.224.130:5432/postgres";
+        String mainURL = "jdbc:postgresql://192.168.0.120:5432/postgres";
         String mainUSER = "postgres";
         String mainPASSWORD = "1234";
         return DriverManager.getConnection(mainURL, mainUSER, mainPASSWORD);
@@ -158,6 +158,19 @@ public class AddDB {
         }
     }
 
+public static void TruncateLocalMeasurementOnly() {
+    try (Connection conn = getLocalConnection();
+         Statement stmt = conn.createStatement()) {
+
+        // TRUNCATE uniquement la table localmeasurement, reset lID
+        stmt.execute("TRUNCATE TABLE \"localmeasurement\" RESTART IDENTITY;");
+
+        System.out.println("Table LocalMeasurement successfully emptied.");
+
+    } catch (SQLException e) {
+        System.err.println("Error during TRUNCATE of LocalMeasurement: " + e.getMessage());
+    }
+}
 
 
 

@@ -1,9 +1,0 @@
--- Table 1 : DEVICE
-DROP TABLE IF EXISTS device CASCADE;
-CREATE TABLE device (
-    id SERIAL PRIMARY KEY,
-    nom VARCHAR(100) NOT NULL,
-    id_original VARCHAR(100) NOT NULL UNIQUE
-);
-
-
