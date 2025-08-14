@@ -529,6 +529,7 @@ public class SensorAgent extends Agent {
                                             for (double[] entry : compareList) {
                                                 coordinatesSet.add(addDB.round2(entry[4]) + ":" + addDB.round2(entry[5]));
                                             }
+                                            coordinatesSet.add(xFromKit + ":" + yFromKit); 
                                             String coordBuilder = String.join("|", coordinatesSet);
 
                                             if (maxDiffEntry != null) {
