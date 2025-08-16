@@ -706,17 +706,24 @@ public static void TruncateLocalMeasurementOnly() {
 
                 // Step 2 — Receiving metadata
                 String[] measurements = line.split("/");
+                // ex:[[Sensor Temperature, DFRobot, Waterproof DS18B20, TEMP-SN-001, 2024-04-05, 5, °C, temperature], [Sensor pH,...,ph]]
+
                 for (String measurement : measurements) {
                     measurement = measurement.trim();
+                    //measurement:"[Sensor Temperature, DFRobot, Waterproof DS18B20, TEMP-SN-001, 2024-04-05, 5, °C, temperature]"
                     if (!measurement.startsWith("[") || !measurement.endsWith("]")) continue;
 
                     String[] parts = measurement.substring(1, measurement.length() - 1).split(",");
+                   //1-"Sensor Temperature, DFRobot, Waterproof DS18B20, TEMP-SN-001, 2024-04-05, 5, °C, temperature"
+                //2-parts=[Sensor Temperature, DFRobot, Waterproof DS18B20, TEMP-SN-001, 2024-04-05, 5, °C, temperature]
                     if (parts.length != 8) {
                         System.out.println("Badly formatted line: " + measurement);
                         continue;
                     }
 
+                    // Take the first element, remove leading/trailing spaces, and replace multiple spaces with a single space
                     String name = parts[0].trim().replaceAll("\\s+", " ");
+
                     if (!receivedMap.containsKey(name) || receivedMap.get(name)) continue;
 
                     String brand = parts[1].trim();
