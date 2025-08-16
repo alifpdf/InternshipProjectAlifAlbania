@@ -704,7 +704,7 @@ public static void TruncateLocalMeasurementOnly() {
                     continue;
                 }
 
-                // Étape 2 — Réception des métadonnées
+                // Step 2 — Receiving metadata
                 String[] measurements = line.split("/");
                 for (String measurement : measurements) {
                     measurement = measurement.trim();
