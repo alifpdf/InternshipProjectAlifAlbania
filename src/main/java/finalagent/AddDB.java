@@ -655,8 +655,8 @@ public static void TruncateLocalMeasurementOnly() {
      * @return A map linking each sensor name to its corresponding local device ID.
      */
     public Map<String, Integer> getLocalDeviceIdsFromArduino() {
-        Map<String, Integer> sensorIdMap = new HashMap<>(); // Nom capteur → ID local (peut être null au début)
-        Map<String, Boolean> receivedMap = new HashMap<>(); // Nom capteur → reçu ou non
+        Map<String, Integer> sensorIdMap = new HashMap<>(); // Sensor name → Local ID (may be null at the beginning)
+        Map<String, Boolean> receivedMap = new HashMap<>(); // Sensor name → Received or not
 
         SerialPort serialPort = SerialPort.getCommPort("/dev/ttyUSB0");
         if (serialPort == null) {
