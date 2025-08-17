@@ -272,7 +272,7 @@ public class SensorAgent extends Agent {
 
                     if (content != null && content.contains("MTS-error") && content.contains("Agent not found")) {
                         String failedAgent = extractAgentFromMtsError(content);  // implement this helper
-                        System.err.println(getLocalName() + " - Detected unreachable agent: " + failedAgent + " â†’ blacklisting.");
+                        System.err.println(getLocalName() + " - Detected unreachable agent: " + failedAgent + " at blacklisting.");
                         blacklistAgentAndNotify(failedAgent);
                     }
 
