@@ -739,6 +739,8 @@ public class SensorAgent extends Agent {
                                 addDB.updateLocalCoordinates(idKit, addDB.round2(newPoint[0]), addDB.round2(newPoint[1]));
 
                                 System.out.printf("Kit %d moved to (%.2f, %.2f)%n", idKit, newPoint[0], newPoint[1]);
+                                // addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
+                                addDB.arduino(localDevice,xaFromKit,yaFromKit);
 
                             } catch (NumberFormatException e) {
                                 System.err.println(getLocalName() + " - Invalid numeric value in Moving data: " + content);
