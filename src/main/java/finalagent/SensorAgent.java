@@ -563,6 +563,8 @@ public class SensorAgent extends Agent {
                                                         yaFromKit=targetY;
                                                         addDB.updateKitCoordinates(idKit,xFromKit,yFromKit);
                                                         System.out.printf("Kit updated to (%.2f, %.2f)%n", targetX, targetY);
+                                                        // addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
+                                                        addDB.arduino(localDevice,xaFromKit,yaFromKit);
                                                         updateAgentList();
                                                         nextagent();
                                                         sendToken();
