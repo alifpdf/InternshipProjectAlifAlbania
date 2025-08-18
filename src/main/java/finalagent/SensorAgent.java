@@ -563,6 +563,7 @@ public class SensorAgent extends Agent {
                                                         yaFromKit=targetY;
                                                         addDB.updateKitCoordinates(idKit,xFromKit,yFromKit);
                                                         System.out.printf("Kit updated to (%.2f, %.2f)%n", targetX, targetY);
+                                                        addDB.TruncateLocalMeasurementOnly();
                                                         // addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
                                                         addDB.arduino(localDevice,xaFromKit,yaFromKit);
                                                         updateAgentList();
@@ -739,6 +740,7 @@ public class SensorAgent extends Agent {
                                 addDB.updateLocalCoordinates(idKit, addDB.round2(newPoint[0]), addDB.round2(newPoint[1]));
 
                                 System.out.printf("Kit %d moved to (%.2f, %.2f)%n", idKit, newPoint[0], newPoint[1]);
+                                addDB.TruncateLocalMeasurementOnly();
                                 // addDB.saveMeasurementToDatabase(xaFromKit,yaFromKit);
                                 addDB.arduino(localDevice,xaFromKit,yaFromKit);
 
