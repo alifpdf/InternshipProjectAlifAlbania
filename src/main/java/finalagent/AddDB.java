@@ -26,6 +26,7 @@ public class AddDB {
 
     // Get connection to the MAIN (remote) database
     public static Connection getMainConnection() throws SQLException {
+        //String mainURL = "jdbc:postgresql://global_server_address:5432/postgres";
         String mainURL = "jdbc:postgresql://192.168.0.120:5432/postgres";
         String mainUSER = "postgres";
         String mainPASSWORD = "1234";
