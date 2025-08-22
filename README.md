@@ -1,5 +1,4 @@
 # InternshipProjectAlifAlbania
-# FinalAgent
 ## Description
 **FinalAgent** is a Java application (based on **JADE**) that orchestrates “sensor” agents on a local network and ingests measurements coming from an **Arduino** via the serial port.
 Two levels of databases are used:
