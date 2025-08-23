@@ -362,10 +362,10 @@ public static void TruncateLocalMeasurementOnly() {
                 deviceIds.add(rsDevices.getInt("id_device"));
             }
 
-            // Step 2: Retrieve latest 10 values per device with coordinates
+            // Step 2: Retrieve latest 5 values per device with coordinates
             String query = """
             SELECT x, y, value FROM LocalMeasurement
-            WHERE id_device = ? ORDER BY timestamp DESC LIMIT 10
+            WHERE id_device = ? ORDER BY timestamp DESC LIMIT 5
         """;
 
             for (int id : deviceIds) {
